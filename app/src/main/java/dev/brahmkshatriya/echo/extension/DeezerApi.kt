@@ -308,6 +308,20 @@ class DeezerApi(
         return jObject
     }
 
+    //Get favorite artists
+    suspend fun getArtists(): JsonObject {
+        val jsonData = callApi(
+            method = "deezer.pageProfile",
+            params = mapOf(
+                "user_id" to userId,
+                "tab" to "artists",
+                "nb" to 50
+            )
+        )
+        val jObject = json.decodeFromString<JsonObject>(jsonData)
+        return jObject
+    }
+
     suspend fun album(album: Album): JsonObject {
         val jsonData = callApi(
             method = "deezer.pageAlbum",

@@ -1,6 +1,7 @@
 package dev.brahmkshatriya.echo.extension
 
 import dev.brahmkshatriya.echo.common.models.Album
+import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.EchoMediaItem
 import dev.brahmkshatriya.echo.common.models.ImageHolder
 import dev.brahmkshatriya.echo.common.models.ImageHolder.Companion.toImageHolder
@@ -51,6 +52,7 @@ fun JsonElement.toEchoMediaItem(
         type.contains("playlist") -> EchoMediaItem.Lists.PlaylistItem(toPlaylist(api))
         type.contains("album") -> EchoMediaItem.Lists.AlbumItem(toAlbum())
         type.contains("song") -> EchoMediaItem.TrackItem(toTrack())
+        type.contains("artist") -> EchoMediaItem.Profile.ArtistItem(toArtist())
         else -> null
     }
 }
@@ -62,6 +64,17 @@ fun JsonElement.toAlbum(): Album {
     return Album(
         id = data["ALB_ID"]?.jsonPrimitive?.content ?: "",
         title = data["ALB_TITLE"]?.jsonPrimitive?.content ?: "",
+        cover = getCover(jsonObject),
+        description = jsonObject["description"]?.jsonPrimitive?.content ?: "",
+        subtitle = jsonObject["subtitle"]?.jsonPrimitive?.content ?: "",
+    )
+}
+
+fun JsonElement.toArtist(): Artist {
+    val data = jsonObject["data"]?.jsonObject ?: jsonObject["DATA"]?.jsonObject ?: jsonObject
+    return Artist(
+        id = data["ALB_ID"]?.jsonPrimitive?.content ?: "",
+        name = data["ALB_TITLE"]?.jsonPrimitive?.content ?: "",
         cover = getCover(jsonObject),
         description = jsonObject["description"]?.jsonPrimitive?.content ?: "",
         subtitle = jsonObject["subtitle"]?.jsonPrimitive?.content ?: "",
