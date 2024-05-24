@@ -27,21 +27,35 @@ import java.util.zip.GZIPInputStream
 
 // Settings placeholder
 class Settings {
-    val deezerLanguage: String? = "en"
-    val deezerCountry: String? = "US"
+    val deezerLanguage: String = "en"
+    val deezerCountry: String = "US"
 }
 
-class DeezerApi(
-    private var arl: String = "",
-    private var sid: String = "",
-    private var token: String = "",
-    var userId: String = "",
-    private var licenseToken: String = "",
-    private var userName: String = "",
-    private var favoritesPlaylistId: String = ""
-) {
+class DeezerApi {
 
     private val settings = Settings()
+
+    // Access shared email and pass
+    private val arl: String
+        get() = DeezerCredentials.arl
+
+    private val sid: String
+        get() = DeezerCredentials.sid
+
+    private val token: String
+        get() = DeezerCredentials.token
+
+    private val userId: String
+        get() = DeezerCredentials.userId
+
+    private val licenseToken: String
+        get() = DeezerCredentials.licenseToken
+
+    private val email: String
+        get() = DeezerCredentials.email
+
+    private val pass: String
+        get() = DeezerCredentials.pass
 
     private val client: OkHttpClient = OkHttpClient.Builder()
         .addInterceptor { chain ->
@@ -66,10 +80,10 @@ class DeezerApi(
         headersBuilder.add("Accept", "*/*")
         headersBuilder.add("Accept-Charset", "utf-8,ISO-8859-1;q=0.7,*;q=0.3")
         headersBuilder.add("Accept-Encoding", "gzip")
-        headersBuilder.add("Accept-Language", settings.deezerLanguage ?: "en")
+        headersBuilder.add("Accept-Language", settings.deezerLanguage)
         headersBuilder.add("Cache-Control", "max-age=0")
         headersBuilder.add("Connection", "keep-alive")
-        headersBuilder.add("Content-Language", "${settings.deezerLanguage ?: "en"}-${settings.deezerCountry ?: "US"}")
+        headersBuilder.add("Content-Language", "${settings.deezerLanguage}-${settings.deezerCountry}")
         headersBuilder.add("Content-Type", "application/json; charset=utf-8")
         if (method != "user.getArl") {
             headersBuilder.add("Cookie", "arl=$arl; sid=$sid")
@@ -121,27 +135,24 @@ class DeezerApi(
         val responseBody = response.body?.string()
         val body = responseBody.toString()
 
+        if (method == "deezer.getUserData") {
+            response.headers.forEach {
+                if (it.second.startsWith("sid=")) {
+                    DeezerCredentials.sid = it.second.substringAfter("sid=").substringBefore(";")
+                }
+            }
+        }
+
+        if(body.contains("\"VALID_TOKEN_REQUIRED\":\"Invalid CSRF token\"")) {
+            val userList = DeezerExtension().onLogin(email, pass)
+            DeezerExtension().onSetLoginUser(userList.first())
+            return@withContext callApi(method, params, gatewayInput)
+        }
+
         body
     }
 
-    private suspend fun rawAuthorize(): Boolean {
-        val jsonData = callApi("deezer.getUserData")
-        val jObject = json.decodeFromString<JsonObject>(jsonData)
-        val userResults = jObject["results"]
-        val user = userResults!!.jsonObject["USER"]
-        val userId = user!!.jsonObject["USER_ID"]!!.jsonPrimitive.content
-        if (userId.contentEquals("0")) {
-           return false
-        } else {
-            //token = userResults.jsonObject["checkForm"]!!.jsonPrimitive.content
-            //userId = user.jsonObject["USER_ID"]!!.jsonPrimitive.int.toString()
-            userName = user.jsonObject["BLOG_NAME"]!!.jsonPrimitive.content
-            favoritesPlaylistId = user.jsonObject["LOVEDTRACKS_ID"]!!.jsonPrimitive.content
-          return  true
-        }
-    }
-
-    suspend fun makeUser(): List<User> {
+    suspend fun makeUser(email: String = "", pass: String = ""): List<User> {
         val userList = mutableListOf<User>()
         val jsonData = callApi("deezer.getUserData")
         val jObject = json.decodeFromString<JsonObject>(jsonData)
@@ -161,16 +172,18 @@ class DeezerApi(
                 "user_id" to userId,
                 "sid" to sid,
                 "token" to token,
-                "license_token" to licenseToken
+                "license_token" to licenseToken,
+                "email" to email,
+                "pass" to pass
             )
         )
         userList.add(user)
         return userList
     }
 
-    suspend fun getArlByEmail(mail: String, password: String): Map<String, String?> {
+    suspend fun getArlByEmail(mail: String, password: String) {
         //Get SID
-        getSid()
+        //getSid()
 
         val clientId = "447462"
         val clientSecret = "a83bf7f38ad2f137e444727cfc3775cf"
@@ -186,18 +199,12 @@ class DeezerApi(
         //Get access token
         val responseJson = getToken(params)
         val apiResponse = json.decodeFromString<JsonObject>(responseJson)
-        token = apiResponse.jsonObject["access_token"]!!.jsonPrimitive.content
+        DeezerCredentials.token = apiResponse.jsonObject["access_token"]!!.jsonPrimitive.content
 
         // Get ARL
         val arlResponse = callApi("user.getArl")
         val arlObject = json.decodeFromString<JsonObject>(arlResponse)
-        arl = arlObject["results"]!!.jsonPrimitive.content
-
-        return mapOf(
-            "arl" to arl,
-            "token" to token,
-            "sid" to sid
-        )
+        DeezerCredentials.arl = arlObject["results"]!!.jsonPrimitive.content
     }
 
     private fun md5(input: String): String {
@@ -229,7 +236,7 @@ class DeezerApi(
         }
     }
 
-      fun getSid(): String {
+      fun getSid() {
         //Get SID
         val url = "https://www.deezer.com/"
         val request = Request.Builder()
@@ -240,16 +247,15 @@ class DeezerApi(
         val response = client.newCall(request).execute()
         response.headers.forEach {
             if (it.second.startsWith("sid=")) {
-               sid = it.second.substringAfter("sid=").substringBefore(";")
+               DeezerCredentials.sid = it.second.substringAfter("sid=").substringBefore(";")
             }
         }
-          return sid
      }
 
     suspend fun getMP3MediaUrl(track: Track): JsonObject = withContext(Dispatchers.IO) {
         val headersBuilder = Headers.Builder()
         headersBuilder.add("Accept-Encoding", "gzip")
-        headersBuilder.add("Accept-Language", settings.deezerLanguage ?: "en")
+        headersBuilder.add("Accept-Language", settings.deezerLanguage)
         headersBuilder.add("Cache-Control", "max-age=0")
         headersBuilder.add("Connection", "Keep-alive")
         headersBuilder.add("Content-Type", "application/json; charset=utf-8")

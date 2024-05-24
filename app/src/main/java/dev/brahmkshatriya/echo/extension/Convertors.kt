@@ -18,47 +18,42 @@ import kotlinx.serialization.json.jsonPrimitive
 
 
 fun JsonElement.toMediaItemsContainer(
-    api: DeezerApi = DeezerApi(),
     name: String?
 ): MediaItemsContainer {
     val itemsArray = jsonObject["items"]!!.jsonArray
     return MediaItemsContainer.Category(
         title = name ?: "Unknown",
         list = itemsArray.mapNotNull { item ->
-            item.jsonObject.toEchoMediaItem(api)
+            item.jsonObject.toEchoMediaItem()
         }
     )
 }
 fun JsonObject.toMediaItemsContainer(
-    api: DeezerApi = DeezerApi(),
     name: String?
 ): MediaItemsContainer {
     return MediaItemsContainer.Category(
         title = name ?: "Unknown",
-        list = listOf(jsonObject.toEchoMediaItem(api) ?: emptyList<EchoMediaItem>().first())
+        list = listOf(jsonObject.toEchoMediaItem() ?: emptyList<EchoMediaItem>().first())
     )
 }
 
 fun JsonArray.toMediaItemsContainer(
-    api: DeezerApi = DeezerApi(),
     name: String?
 ): MediaItemsContainer {
     val itemsArray = jsonArray
     return MediaItemsContainer.Category(
         title = name ?: "Unknown",
         list = itemsArray.mapNotNull { item ->
-            item.jsonObject.toEchoMediaItem(api)
+            item.jsonObject.toEchoMediaItem()
         }
     )
 }
 
-fun JsonElement.toEchoMediaItem(
-    api: DeezerApi
-): EchoMediaItem? {
+fun JsonElement.toEchoMediaItem(): EchoMediaItem? {
     val data = jsonObject["data"]?.jsonObject ?: jsonObject
     val type = data["__TYPE__"]!!.jsonPrimitive.content
     return when {
-        type.contains("playlist") -> EchoMediaItem.Lists.PlaylistItem(toPlaylist(api))
+        type.contains("playlist") -> EchoMediaItem.Lists.PlaylistItem(toPlaylist())
         type.contains("album") -> EchoMediaItem.Lists.AlbumItem(toAlbum())
         type.contains("song") -> EchoMediaItem.TrackItem(toTrack())
         type.contains("artist") -> EchoMediaItem.Profile.ArtistItem(toArtist())
@@ -101,12 +96,12 @@ fun JsonElement.toTrack(): Track {
         cover = getCover(md5, "cover"),
         extras = mapOf(
             "TRACK_TOKEN" to (data["TRACK_TOKEN"]?.jsonPrimitive?.content ?: ""),
-            "FILESIZE_MP3_MISC" to (data["FILESIZE_MP3_MISC"]?.jsonPrimitive?.content ?: "")
+            "FILESIZE_MP3_MISC" to (data["FILESIZE_MP3_MISC"]?.jsonPrimitive?.content ?: "0")
         )
     )
 }
 
-fun JsonElement.toPlaylist(api: DeezerApi): Playlist {
+fun JsonElement.toPlaylist(): Playlist {
     val data = jsonObject["data"]?.jsonObject ?: jsonObject["DATA"]?.jsonObject ?: jsonObject
     val type = data["PICTURE_TYPE"]?.jsonPrimitive?.content ?: ""
     val md5 = data["PLAYLIST_PICTURE"]?.jsonPrimitive?.content ?: ""
@@ -116,7 +111,7 @@ fun JsonElement.toPlaylist(api: DeezerApi): Playlist {
         cover = getCover(md5, type),
         description = data["DESCRIPTION"]?.jsonPrimitive?.content ?: "",
         subtitle = jsonObject["subtitle"]?.jsonPrimitive?.content ?: "",
-        isEditable = data["PARENT_USER_ID"]!!.jsonPrimitive.content == api.userId,
+        isEditable = data["PARENT_USER_ID"]!!.jsonPrimitive.content == DeezerCredentials.userId,
         tracks = data["NB_SONG"]?.jsonPrimitive?.int ?: 0,
     )
 }
