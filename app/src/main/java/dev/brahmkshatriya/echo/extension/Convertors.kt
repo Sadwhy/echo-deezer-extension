@@ -111,26 +111,26 @@ fun JsonElement.toPlaylist(api: DeezerApi): Playlist {
 fun getCover(jsonObject: JsonObject, type: String? = null): ImageHolder {
     if(type != null) {
         val md5 = jsonObject["PLAYLIST_PICTURE"]!!.jsonPrimitive.content
-        val url = "https://e-cdns-images.dzcdn.net/images/$type/$md5/264x264-000000-80-0-0.jpg"
+        val url = "https://e-cdns-images.dzcdn.net/images/$type/$md5/1200x1200-000000-80-0-0.jpg"
         return url.toImageHolder()
     } else {
         if (jsonObject["pictures"]?.jsonArray != null) {
             val pictureArray = jsonObject["pictures"]!!.jsonArray
             val picObject = pictureArray.first().jsonObject
             val md5 = picObject["md5"]!!.jsonPrimitive.content
-            val type = picObject["type"]!!.jsonPrimitive.content
-            val url = "https://e-cdns-images.dzcdn.net/images/$type/$md5/264x264-000000-80-0-0.jpg"
+            val ownType = picObject["type"]!!.jsonPrimitive.content
+            val url = "https://e-cdns-images.dzcdn.net/images/$ownType/$md5/1200x1200-000000-80-0-0.jpg"
             return url.toImageHolder()
         } else if (jsonObject["DATA"]?.jsonObject != null) {
             val dataObject = jsonObject["DATA"]!!.jsonObject
             val md5 = dataObject["PLAYLIST_PICTURE"]?.jsonPrimitive?.content
                 ?: dataObject["ALB_PICTURE"]?.jsonPrimitive?.content ?: ""
-            val type = dataObject["PICTURE_TYPE"]?.jsonPrimitive?.content ?: "cover"
-            val url = "https://e-cdns-images.dzcdn.net/images/$type/$md5/264x264-000000-80-0-0.jpg"
+            val ownType = dataObject["PICTURE_TYPE"]?.jsonPrimitive?.content ?: "cover"
+            val url = "https://e-cdns-images.dzcdn.net/images/$ownType/$md5/1200x1200-000000-80-0-0.jpg"
             return url.toImageHolder()
         } else {
             val md5 = jsonObject["ALB_PICTURE"]?.jsonPrimitive?.content ?: ""
-            val url = "https://e-cdns-images.dzcdn.net/images/cover/$md5/264x264-000000-80-0-0.jpg"
+            val url = "https://e-cdns-images.dzcdn.net/images/cover/$md5/1200x1200-000000-80-0-0.jpg"
             return url.toImageHolder()
         }
     }
