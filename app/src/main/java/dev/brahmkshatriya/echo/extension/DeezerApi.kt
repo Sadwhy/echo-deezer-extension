@@ -386,7 +386,7 @@ class DeezerApi(
 
     suspend fun artist(artist: Artist): JsonObject {
         val jsonData = callApi(
-            method = "song.getListData",
+            method = "deezer.pageArtist",
             params = mapOf(
                 "art_id" to artist.id,
                 "lang" to settings.deezerLanguage
@@ -401,9 +401,9 @@ class DeezerApi(
         val jsonData = callApi(
             method = "deezer.pageProfile",
             params = mapOf(
-                "user_id" to userId,
+                "nb" to 40,
                 "tab" to "artists",
-                "nb" to 50
+                "user_id" to userId
             )
         )
         val jObject = json.decodeFromString<JsonObject>(jsonData)
