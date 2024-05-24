@@ -141,7 +141,7 @@ class DeezerApi(
         }
     }
 
-    suspend fun makeUser(): List<User>{
+    suspend fun makeUser(): List<User> {
         val userList = mutableListOf<User>()
         val jsonData = callApi("deezer.getUserData")
         val jObject = json.decodeFromString<JsonObject>(jsonData)
@@ -170,18 +170,7 @@ class DeezerApi(
 
     suspend fun getArlByEmail(mail: String, password: String): Map<String, String?> {
         //Get SID
-        val url = "https://www.deezer.com/"
-        val request = Request.Builder()
-            .url(url)
-            .get()
-            .build()
-
-        val response = client.newCall(request).execute()
-        response.headers.forEach {
-            if(it.second.startsWith("sid=")) {
-                sid = it.second.substringAfter("sid=").substringBefore(";")
-            }
-        }
+        getSid()
 
         val clientId = "447462"
         val clientSecret = "a83bf7f38ad2f137e444727cfc3775cf"
@@ -239,6 +228,23 @@ class DeezerApi(
             return response.body?.string() ?: throw Exception("Empty response body")
         }
     }
+
+      fun getSid(): String {
+        //Get SID
+        val url = "https://www.deezer.com/"
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .build()
+
+        val response = client.newCall(request).execute()
+        response.headers.forEach {
+            if (it.second.startsWith("sid=")) {
+               sid = it.second.substringAfter("sid=").substringBefore(";")
+            }
+        }
+          return sid
+     }
 
     suspend fun getMP3MediaUrl(track: Track): JsonObject = withContext(Dispatchers.IO) {
         val headersBuilder = Headers.Builder()
@@ -307,7 +313,8 @@ class DeezerApi(
 
         // Create request body
         val requestBody = JSONObject(mapOf(
-            "formats" to arrayOf("FLAC", "MP3_320", "MP3_128", "MP3_64", "MP3_MISC"),
+            // Limit to 320 until download is added
+            "formats" to arrayOf(/*"FLAC", */"MP3_320", "MP3_128", "MP3_64", "MP3_MISC"),
             "ids" to arrayOf(track.id.toLong())
         )).toString().toRequestBody("application/json; charset=utf-8".toMediaType())
 

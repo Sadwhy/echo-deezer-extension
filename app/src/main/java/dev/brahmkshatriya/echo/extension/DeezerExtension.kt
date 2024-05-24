@@ -36,7 +36,7 @@ import org.apache.http.conn.ConnectTimeoutException
 import java.util.Locale
 
 class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClient, AlbumClient,
-    PlaylistClient, LoginClient.WebView, LoginClient.UsernamePassword, LibraryClient {
+    PlaylistClient, LoginClient.WebView, LoginClient.UsernamePassword, LoginClient.CustomTextInput, LibraryClient {
 
     private val json = Json {
         isLenient = true
@@ -415,6 +415,24 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         } else {
             return emptyList()
         }
+    }
+
+    override val loginInputFields: List<LoginClient.InputField>
+        get() = listOf(
+            LoginClient.InputField(
+                key = "arl",
+                label = "ARL",
+                isRequired = false,
+                isPassword = true
+
+            )
+        )
+
+    override suspend fun onLogin(data: Map<String, String?>): List<User> {
+        val arl = data["arl"] ?: ""
+        val sid = DeezerApi().getSid()
+        val userList = DeezerApi(arl, sid).makeUser()
+        return userList
     }
 
     override suspend fun onLogin(username: String, password: String): List<User> {
