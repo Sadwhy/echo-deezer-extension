@@ -79,11 +79,11 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
 
     override suspend fun getHomeTabs(): List<Tab> {
         if (arl == "") return  emptyList()
-        val resultObject = DeezerApi(arl, sid, token, userId).homePage()
-        val id = resultObject["page_id"]!!.jsonPrimitive.content
+        val jObject = DeezerApi(arl, sid, token, userId).homePage()
+        val resultObject = jObject["results"]!!.jsonObject
         val sections = resultObject["sections"]!!.jsonArray
         val tab = Tab(
-            id = id,
+            id = "home",
             name = "Home",
             extras = mapOf(
                 "sections" to sections.toString()

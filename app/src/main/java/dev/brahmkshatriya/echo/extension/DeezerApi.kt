@@ -475,7 +475,6 @@ class DeezerApi(
             """.trimIndent()
         )
         val jObject = json.decodeFromString<JsonObject>(jsonData)
-        val result = jObject["results"]!!.jsonObject
-        return result
+        return jObject
     }
 }
