@@ -66,10 +66,19 @@ fun JsonElement.toEchoMediaItem(): EchoMediaItem? {
 fun JsonElement.toAlbum(): Album {
     val data = jsonObject["data"]?.jsonObject ?: jsonObject["DATA"]?.jsonObject ?: jsonObject
     val md5 = data["ALB_PICTURE"]?.jsonPrimitive?.content ?: ""
+    val artistObject = data["ARTISTS"]?.jsonArray?.first()?.jsonObject
+    val artistMd5 = artistObject?.get("ART_PICTURE")?.jsonPrimitive?.content ?: ""
     return Album(
         id = data["ALB_ID"]?.jsonPrimitive?.content ?: "",
         title = data["ALB_TITLE"]?.jsonPrimitive?.content ?: "",
         cover = getCover(md5, "cover"),
+        artists = listOf(
+            Artist(
+                id = artistObject?.get("ART_ID")?.jsonPrimitive?.content ?: "",
+                name = artistObject?.get("ART_NAME")?.jsonPrimitive?.content ?: "",
+                cover = getCover(artistMd5, "artist")
+            )
+        ),
         description = jsonObject["description"]?.jsonPrimitive?.content ?: "",
         subtitle = jsonObject["subtitle"]?.jsonPrimitive?.content ?: "",
     )
@@ -90,10 +99,19 @@ fun JsonElement.toArtist(): Artist {
 fun JsonElement.toTrack(): Track {
     val data = jsonObject["data"]?.jsonObject ?: jsonObject
     val md5 = data["ALB_PICTURE"]?.jsonPrimitive?.content ?: ""
+    val artistObject = data["ARTISTS"]?.jsonArray?.first()?.jsonObject
+    val artistMd5 = artistObject?.get("ART_PICTURE")?.jsonPrimitive?.content ?: ""
     return Track(
         id = data["SNG_ID"]!!.jsonPrimitive.content,
         title = data["SNG_TITLE"]!!.jsonPrimitive.content,
         cover = getCover(md5, "cover"),
+        artists = listOf(
+            Artist(
+                id = artistObject?.get("ART_ID")?.jsonPrimitive?.content ?: "",
+                name = artistObject?.get("ART_NAME")?.jsonPrimitive?.content ?: "",
+                cover = getCover(artistMd5, "artist")
+            )
+        ),
         extras = mapOf(
             "TRACK_TOKEN" to (data["TRACK_TOKEN"]?.jsonPrimitive?.content ?: ""),
             "FILESIZE_MP3_MISC" to (data["FILESIZE_MP3_MISC"]?.jsonPrimitive?.content ?: "0")

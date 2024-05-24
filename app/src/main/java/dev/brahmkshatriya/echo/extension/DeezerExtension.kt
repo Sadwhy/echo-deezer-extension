@@ -309,7 +309,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     override suspend fun getStreamableVideo(streamable: Streamable) = throw Exception("not Used")
 
     override suspend fun loadTrack(track: Track) = coroutineScope {
-        val jsonObject = if (track.extras["FILESIZE_MP3_MISC"] != "0") {
+        val jsonObject = if (track.extras["FILESIZE_MP3_MISC"] != "0" && track.extras["FILESIZE_MP3_MISC"] != null) {
             DeezerApi().getMP3MediaUrl(track)
         } else {
             DeezerApi().getMediaUrl(track)
@@ -324,6 +324,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
             id = track.id,
             title = track.title,
             cover = track.cover,
+            artists = track.artists,
             audioStreamables = listOf(
                 Streamable(
                     id = url,
@@ -336,27 +337,11 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         )
     }
 
-    override fun getMediaItems(track: Track): PagedData<MediaItemsContainer> = PagedData.Single {
-        coroutineScope {
-            val album = track.album?.let {
-                async { listOf(loadAlbum(it).toMediaItem().toMediaItemsContainer()) }
-            } ?: async { listOf() }
-            album.await()
-        }
-    }
+    override fun getMediaItems(track: Track): PagedData<MediaItemsContainer> = getMediaItems(track.artists.first())
 
     //<============= Album =============>
 
-    override fun getMediaItems(album: Album) = PagedData.Single {
-        val jsonObject = DeezerApi().album(album)
-        val resultsObject = jsonObject["results"]!!.jsonObject
-        val songsObject = resultsObject["SONGS"]!!.jsonObject
-        val dataArray = songsObject["data"]!!.jsonArray
-        val data = dataArray.map { song ->
-            song.jsonObject.toMediaItemsContainer(name = "")
-        }
-        data
-    }
+    override fun getMediaItems(album: Album) = getMediaItems(album.artists.first())
 
     override suspend fun loadAlbum(album: Album): Album {
         val jsonObject = DeezerApi().album(album)
@@ -385,7 +370,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         val data = dataArray.map { song ->
             song.jsonObject.toMediaItemsContainer(name = "")
         }
-        data
+        emptyList<MediaItemsContainer>()
     }
 
     override suspend fun loadPlaylist(playlist: Playlist): Playlist {

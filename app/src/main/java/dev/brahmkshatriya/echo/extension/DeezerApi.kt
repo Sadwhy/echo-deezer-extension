@@ -143,7 +143,7 @@ class DeezerApi {
             }
         }
 
-        if(body.contains("\"VALID_TOKEN_REQUIRED\":\"Invalid CSRF token\"")) {
+        if(body.contains("\"VALID_TOKEN_REQUIRED\":\"Invalid CSRF token\"") && (email != "" && pass != "")) {
             val userList = DeezerExtension().onLogin(email, pass)
             DeezerExtension().onSetLoginUser(userList.first())
             return@withContext callApi(method, params, gatewayInput)
