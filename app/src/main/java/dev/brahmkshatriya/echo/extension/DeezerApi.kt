@@ -183,7 +183,7 @@ class DeezerApi {
 
     suspend fun getArlByEmail(mail: String, password: String) {
         //Get SID
-        //getSid()
+        getSid()
 
         val clientId = "447462"
         val clientSecret = "a83bf7f38ad2f137e444727cfc3775cf"
@@ -309,7 +309,7 @@ class DeezerApi {
         jObject
     }
 
-    suspend fun getMediaUrl(track: Track): JsonObject = withContext(Dispatchers.IO) {
+    suspend fun getMediaUrl(track: Track, useFlac: Boolean): JsonObject = withContext(Dispatchers.IO) {
         val urlBuilder = HttpUrl.Builder()
             .scheme("https")
             .host("dzmedia.fly.dev")
@@ -319,8 +319,11 @@ class DeezerApi {
 
         // Create request body
         val requestBody = JSONObject(mapOf(
-            // Limit to 320 until download is added
-            "formats" to arrayOf(/*"FLAC", */"MP3_320", "MP3_128", "MP3_64", "MP3_MISC"),
+            if(useFlac) {
+                "formats" to arrayOf("FLAC", "MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
+            } else {
+                "formats" to arrayOf("MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
+            },
             "ids" to arrayOf(track.id.toLong())
         )).toString().toRequestBody("application/json; charset=utf-8".toMediaType())
 
@@ -472,6 +475,29 @@ class DeezerApi {
         val jObject = json.decodeFromString<JsonObject>(jsonData)
         return jObject
     }
+
+    suspend fun addToPlaylist(playlist: Playlist, tracks: List<Track>) {
+       callApi(
+            method = "playlist.addSongs",
+            params = mapOf(
+                "playlist_id" to playlist.id,
+                "songs" to arrayOf(tracks.map { it.id } + 0)
+            )
+       )
+    }
+
+    suspend fun removeFromPlaylist(playlist: Playlist, tracks: List<Track> , indexes: List<Int>) {
+        val trackIds = tracks.map { it.id }
+        val ids = indexes.map { index -> trackIds[index] }
+        callApi(
+            method = "playlist.deleteSongs",
+            params = mapOf(
+                "playlist_id" to playlist.id,
+                "songs" to arrayOf(ids + 0)
+            )
+        )
+    }
+
 
     suspend fun homePage(): JsonObject {
         val jsonData = callApi(

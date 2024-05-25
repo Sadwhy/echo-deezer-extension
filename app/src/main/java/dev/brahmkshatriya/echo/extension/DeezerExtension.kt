@@ -1,5 +1,6 @@
 package dev.brahmkshatriya.echo.extension
 
+import android.util.Log
 import dev.brahmkshatriya.echo.common.clients.AlbumClient
 import dev.brahmkshatriya.echo.common.clients.ArtistClient
 import dev.brahmkshatriya.echo.common.clients.ExtensionClient
@@ -24,6 +25,8 @@ import dev.brahmkshatriya.echo.common.models.Tab
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.common.models.User
 import dev.brahmkshatriya.echo.common.settings.Setting
+import dev.brahmkshatriya.echo.common.settings.SettingItem
+import dev.brahmkshatriya.echo.common.settings.SettingSwitch
 import dev.brahmkshatriya.echo.common.settings.Settings
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -44,14 +47,23 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         ignoreUnknownKeys = true
     }
 
-    override val settingItems: List<Setting> = listOf()
+    override val settingItems: List<Setting> = listOf(
+        SettingSwitch(
+            "Use FLAC",
+            "flac",
+            "Use FLAC if available (loading takes longer)",
+            false
+        )
+    )
 
     private lateinit var settings: Settings
     override fun setSettings(settings: Settings) {
         this.settings = settings
     }
 
-    // Access shared email and pass
+    private val useFlac
+        get() = settings.getBoolean("flac") ?: false
+
     private val arl: String
         get() = DeezerCredentials.arl
 
@@ -79,23 +91,31 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         val dataList = mutableListOf<MediaItemsContainer>()
         val jsonData = json.decodeFromString<JsonArray>(tab?.extras!!["sections"].toString())
         jsonData.map { section ->
+            val id = section.jsonObject["module_id"]!!.jsonPrimitive.content
             val name = section.jsonObject["title"]!!.jsonPrimitive.content
             // Just for the time being until everything is implemented
-            if (name == "Continue streaming" || name == "Mixes inspired by..." || name == "Playlists you'll love") {
+            if (id == "348128f5-bed6-4ccb-9a37-8e5f5ed08a62" ||
+                id == "8d10a320-f130-4dcb-a610-38baf0c57896" ||
+                id == "2a7e897f-9bcf-4563-8e11-b93a601766e1" ||
+                id == "7a65f4ed-71e1-4b6e-97ba-4de792e4af62" ||
+                id == "25f9200f-1ce0-45eb-abdc-02aecf7604b2" ||
+                id == "c320c7ad-95f5-4021-8de1-cef16b053b6d" ||
+                id == "b2e8249f-8541-479e-ab90-cf4cf5896cbc" ||
+                id == "927121fd-ef7b-428e-8214-ae859435e51c") {
                 val data = section.toMediaItemsContainer(name = name)
                 dataList.add(data)
             }
         }
         dataList
     }
-
     //<============= Library =============>
 
     private var allTabs: Pair<String, List<MediaItemsContainer>>? = null
 
     override suspend fun getLibraryTabs(): List<Tab> {
         if (arl == "") return emptyList()
-        val tabs = listOf(Tab("playlists", "Playlists"), Tab("albums", "Albums"), Tab("tracks", "Tracks"), Tab("artists", "Artists"))
+        val tabs = listOf(Tab("playlists", "Playlists"),
+            Tab("albums", "Albums"), Tab("tracks", "Tracks"), Tab("artists", "Artists"))
         allTabs = "all" to tabs.mapNotNull { tab ->
             when(tab.id) {
                 "playlists" -> {
@@ -199,7 +219,8 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override suspend fun addTracksToPlaylist(playlist: Playlist, tracks: List<Track>, index: Int, new: List<Track>) {
-        TODO("Not yet implemented")
+        if(arl == "") throw loginRequiredException
+        DeezerApi().addToPlaylist(playlist, new)
     }
 
     override suspend fun createPlaylist(title: String, description: String?): Playlist {
@@ -219,7 +240,21 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override suspend fun listEditablePlaylists(): List<Playlist> {
-        TODO("Not yet implemented")
+        if(arl == "") throw loginRequiredException
+        val playlistList = mutableListOf<Playlist>()
+        val jsonObject = DeezerApi().getPlaylists()
+        val resultObject = jsonObject["results"]!!.jsonObject
+        val tabObject = resultObject["TAB"]!!.jsonObject
+        val playlistObject = tabObject["playlists"]!!.jsonObject
+        val dataArray = playlistObject["data"]!!.jsonArray
+        dataArray.map {
+            val playlist = it.toPlaylist()
+            if(playlist.isEditable) {
+                playlistList.add(playlist)
+            }
+
+        }
+        return playlistList
     }
 
     override suspend fun moveTrackInPlaylist(playlist: Playlist, tracks: List<Track>, fromIndex: Int, toIndex: Int) {
@@ -227,7 +262,8 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override suspend fun removeTracksFromPlaylist(playlist: Playlist, tracks: List<Track>, indexes: List<Int>) {
-        TODO("Not yet implemented")
+        if(arl == "") throw loginRequiredException
+        DeezerApi().removeFromPlaylist(playlist, tracks, indexes)
     }
 
     //<============= Search =============>
@@ -312,7 +348,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         val jsonObject = if (track.extras["FILESIZE_MP3_MISC"] != "0" && track.extras["FILESIZE_MP3_MISC"] != null) {
             DeezerApi().getMP3MediaUrl(track)
         } else {
-            DeezerApi().getMediaUrl(track)
+            DeezerApi().getMediaUrl(track, useFlac)
         }
         val dataObject = jsonObject["data"]!!.jsonArray.first().jsonObject
         val mediaObject = dataObject["media"]!!.jsonArray.first().jsonObject
