@@ -1,7 +1,9 @@
 package dev.brahmkshatriya.echo.extension
 
+import dev.brahmkshatriya.echo.common.exceptions.LoginRequiredException
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Artist
+import dev.brahmkshatriya.echo.common.models.ExtensionType
 import dev.brahmkshatriya.echo.common.models.ImageHolder.Companion.toImageHolder
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.Track
@@ -143,10 +145,16 @@ class DeezerApi {
             }
         }
 
-        if(body.contains("\"VALID_TOKEN_REQUIRED\":\"Invalid CSRF token\"") && (email != "" && pass != "")) {
-            val userList = DeezerExtension().onLogin(email, pass)
-            DeezerExtension().onSetLoginUser(userList.first())
-            return@withContext callApi(method, params, gatewayInput)
+        if(body.contains("\"VALID_TOKEN_REQUIRED\":\"Invalid CSRF token\"")) {
+            if(email == "" && pass == "") {
+                DeezerUtils.arl_expired = true
+                throw Exception("Please re-login (Best use User + Pass method)")
+            } else {
+                DeezerUtils.arl_expired = false
+                val userList = DeezerExtension().onLogin(email, pass)
+                DeezerExtension().onSetLoginUser(userList.first())
+                return@withContext callApi(method, params, gatewayInput)
+            }
         }
 
         body
@@ -393,6 +401,24 @@ class DeezerApi {
         return jObject
     }
 
+    suspend fun addFavoriteTrack(id: String) {
+        callApi(
+            method = "favorite_song.add",
+            params = mapOf(
+                "SNG_ID" to id
+            )
+        )
+    }
+
+    suspend fun removeFavoriteTrack(id: String) {
+        callApi(
+            method = "favorite_song.remove",
+            params = mapOf(
+                "SNG_ID" to id
+            )
+        )
+    }
+
     suspend fun artist(artist: Artist): JsonObject {
         val jsonData = callApi(
             method = "deezer.pageArtist",
@@ -494,6 +520,53 @@ class DeezerApi {
             params = mapOf(
                 "playlist_id" to playlist.id,
                 "songs" to arrayOf(ids + 0)
+            )
+        )
+    }
+
+    suspend fun createPlaylist(title: String, description: String? = ""): JsonObject {
+        val jsonData = callApi(
+            method = "playlist.create",
+            params = mapOf(
+                "title" to title,
+                "description" to description,
+                "songs" to emptyArray<String>(),
+                "status" to 0
+            )
+        )
+        val jObject = json.decodeFromString<JsonObject>(jsonData)
+        return jObject
+    }
+
+    suspend fun deletePlaylist(id: String) {
+        callApi(
+            method = "playlist.delete",
+            params = mapOf(
+                "playlist_id" to id
+            )
+        )
+    }
+
+    //Update playlist metadata, status = see createPlaylist
+    suspend fun updatePlaylist(id: String, title: String, description: String? = "") {
+        callApi(
+            method = "playlist.update",
+            params = mapOf(
+                "description" to description,
+                "playlist_id" to id,
+                "status" to 0,
+                "title" to title
+            )
+        )
+    }
+
+    suspend fun updatePlaylistOrder(playlistId: String, ids: Array<String>) {
+        callApi(
+            method = "playlist.updateOrder",
+            params = mapOf(
+                "order" to ids,
+                "playlist_id" to playlistId,
+                "position" to 0,
             )
         )
     }

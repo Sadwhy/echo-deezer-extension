@@ -9,3 +9,7 @@ object DeezerCredentials {
     var email: String = ""
     var pass: String = ""
 }
+
+object DeezerUtils {
+    var arl_expired: Boolean = false
+}

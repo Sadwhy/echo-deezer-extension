@@ -9,6 +9,7 @@ import dev.brahmkshatriya.echo.common.clients.LibraryClient
 import dev.brahmkshatriya.echo.common.clients.LoginClient
 import dev.brahmkshatriya.echo.common.clients.PlaylistClient
 import dev.brahmkshatriya.echo.common.clients.SearchClient
+import dev.brahmkshatriya.echo.common.clients.ShareClient
 import dev.brahmkshatriya.echo.common.clients.TrackClient
 import dev.brahmkshatriya.echo.common.exceptions.LoginRequiredException
 import dev.brahmkshatriya.echo.common.helpers.PagedData
@@ -40,7 +41,8 @@ import org.apache.http.conn.ConnectTimeoutException
 import java.util.Locale
 
 class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClient, AlbumClient, ArtistClient,
-    PlaylistClient, LoginClient.WebView, LoginClient.UsernamePassword, LoginClient.CustomTextInput, LibraryClient {
+    PlaylistClient, ShareClient, LoginClient.WebView, LoginClient.UsernamePassword, LoginClient.CustomTextInput,
+    LibraryClient {
 
     private val json = Json {
         isLenient = true
@@ -67,12 +69,15 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     private val arl: String
         get() = DeezerCredentials.arl
 
+    private val arlExpired: Boolean
+        get() = DeezerUtils.arl_expired
+
     override suspend fun onExtensionSelected() {}
 
     //<============= HomeTab =============>
 
     override suspend fun getHomeTabs(): List<Tab> {
-        if (arl == "") return  emptyList()
+        if (arl == "" || arlExpired) return  emptyList()
         val jObject = DeezerApi().homePage()
         val resultObject = jObject["results"]!!.jsonObject
         val sections = resultObject["sections"]!!.jsonArray
@@ -87,7 +92,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override fun getHomeFeed(tab: Tab?): PagedData<MediaItemsContainer> = PagedData.Single {
-        if(arl == "") throw loginRequiredException
+        if(arl == "" || arlExpired) throw loginRequiredException
         val dataList = mutableListOf<MediaItemsContainer>()
         val jsonData = json.decodeFromString<JsonArray>(tab?.extras!!["sections"].toString())
         jsonData.map { section ->
@@ -113,7 +118,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     private var allTabs: Pair<String, List<MediaItemsContainer>>? = null
 
     override suspend fun getLibraryTabs(): List<Tab> {
-        if (arl == "") return emptyList()
+        if (arl == "" || arlExpired) return emptyList()
         val tabs = listOf(Tab("playlists", "Playlists"),
             Tab("albums", "Albums"), Tab("tracks", "Tracks"), Tab("artists", "Artists"))
         allTabs = "all" to tabs.mapNotNull { tab ->
@@ -157,7 +162,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override fun getLibraryFeed(tab: Tab?) = PagedData.Single {
-        if(arl == "") throw loginRequiredException
+        if(arl == "" || arlExpired) throw loginRequiredException
         val tabId = tab?.id ?: "all"
         var list = listOf<MediaItemsContainer>()
         when (tabId) {
@@ -219,28 +224,46 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override suspend fun addTracksToPlaylist(playlist: Playlist, tracks: List<Track>, index: Int, new: List<Track>) {
-        if(arl == "") throw loginRequiredException
+        if(arl == "" || arlExpired) throw loginRequiredException
         DeezerApi().addToPlaylist(playlist, new)
     }
 
     override suspend fun createPlaylist(title: String, description: String?): Playlist {
-        TODO("Not yet implemented")
+        if(arl == "" || arlExpired) throw loginRequiredException
+        val jsonObject = DeezerApi().createPlaylist(title, description)
+        val id = jsonObject["results"]?.jsonPrimitive?.content ?: ""
+        val playlist = Playlist(
+            id = id,
+            title = title,
+            description = description,
+            isEditable = true
+        )
+        return playlist
     }
 
     override suspend fun deletePlaylist(playlist: Playlist) {
-        TODO("Not yet implemented")
+        if(arl == "" || arlExpired) throw loginRequiredException
+        DeezerApi().deletePlaylist(playlist.id)
     }
 
     override suspend fun editPlaylistMetadata(playlist: Playlist, title: String, description: String?) {
-        TODO("Not yet implemented")
+        if(arl == "" || arlExpired) throw loginRequiredException
+        DeezerApi().updatePlaylist(playlist.id, title, description)
     }
 
     override suspend fun likeTrack(track: Track, liked: Boolean): Boolean {
-        TODO("Not yet implemented")
+        if(arl == "" || arlExpired) throw loginRequiredException
+        if(liked) {
+            DeezerApi().addFavoriteTrack(track.id)
+            return true
+        } else {
+            DeezerApi().removeFavoriteTrack(track.id)
+            return false
+        }
     }
 
     override suspend fun listEditablePlaylists(): List<Playlist> {
-        if(arl == "") throw loginRequiredException
+        if(arl == "" || arlExpired) throw loginRequiredException
         val playlistList = mutableListOf<Playlist>()
         val jsonObject = DeezerApi().getPlaylists()
         val resultObject = jsonObject["results"]!!.jsonObject
@@ -258,11 +281,14 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override suspend fun moveTrackInPlaylist(playlist: Playlist, tracks: List<Track>, fromIndex: Int, toIndex: Int) {
-        TODO("Not yet implemented")
+        if(arl == "" || arlExpired) throw loginRequiredException
+        val idArray = tracks.map { it.id }.toTypedArray()
+        val newIdArray = moveElement(idArray, fromIndex, toIndex)
+        DeezerApi().updatePlaylistOrder(playlist.id, newIdArray)
     }
 
     override suspend fun removeTracksFromPlaylist(playlist: Playlist, tracks: List<Track>, indexes: List<Int>) {
-        if(arl == "") throw loginRequiredException
+        if(arl == "" || arlExpired) throw loginRequiredException
         DeezerApi().removeFromPlaylist(playlist, tracks, indexes)
     }
 
@@ -286,7 +312,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
 
     private var oldSearch: Pair<String, List<MediaItemsContainer>>? = null
     override fun searchFeed(query: String?, tab: Tab?) = PagedData.Single {
-        if (arl == "") throw loginRequiredException
+        if(arl == "" || arlExpired) throw loginRequiredException
         query ?: return@Single emptyList()
         val old = oldSearch?.takeIf {
             it.first == query && (tab == null || tab.id == "All")
@@ -309,7 +335,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override suspend fun searchTabs(query: String?): List<Tab> {
-        if (arl == "") return emptyList()
+        if (arl == "" || arlExpired) return emptyList()
         query ?: return emptyList()
         val jsonObject = DeezerApi().search(query)
         val resultObject = jsonObject["results"]!!.jsonObject
@@ -530,11 +556,6 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         return userList
     }
 
-    suspend fun reLogin(username: String, password: String) {
-        DeezerApi().getArlByEmail(username, password)
-        DeezerApi().makeUser(username, password)
-    }
-
     override suspend fun onSetLoginUser(user: User?) {
         if (user != null) {
             DeezerCredentials.arl = user.extras["arl"] ?: ""
@@ -546,4 +567,16 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
             DeezerCredentials.pass = user.extras["pass"] ?: ""
         }
     }
+
+    //<============= Share =============>
+
+    override suspend fun onShare(album: Album): String = "https://www.deezer.com/us/album/${album.id}"
+
+    override suspend fun onShare(artist: Artist): String = "https://www.deezer.com/us/artist/${artist.id}"
+
+    override suspend fun onShare(playlist: Playlist): String = "https://www.deezer.com/us/playlist/${playlist.id}"
+
+    override suspend fun onShare(track: Track): String = "https://www.deezer.com/us/track/${track.id}"
+
+    override suspend fun onShare(user: User): String = "https://www.deezer.com/us/profile/${user.id}"
 }

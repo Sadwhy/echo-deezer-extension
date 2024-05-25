@@ -150,3 +150,29 @@ private fun decryptStreamChunk(chunk: ByteArray, key: String): ByteArray {
     println("Decrypted chunk size: ${decryptedBytes.size}")
     return decryptedBytes
 }
+
+fun <T> moveElement(array: Array<T>, fromIndex: Int, toIndex: Int): Array<T> {
+    if (fromIndex !in array.indices || toIndex !in array.indices) {
+        throw IndexOutOfBoundsException("Index out of bounds")
+    }
+
+    if (fromIndex == toIndex) {
+        return array
+    }
+
+    val element = array[fromIndex]
+    if (fromIndex < toIndex) {
+        // Move elements from fromIndex+1 to toIndex one position to the left
+        for (i in fromIndex until toIndex) {
+            array[i] = array[i + 1]
+        }
+    } else {
+        // Move elements from toIndex to fromIndex-1 one position to the right
+        for (i in fromIndex downTo toIndex + 1) {
+            array[i] = array[i - 1]
+        }
+    }
+    array[toIndex] = element
+
+    return array
+}
