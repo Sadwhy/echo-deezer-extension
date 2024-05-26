@@ -11,6 +11,7 @@ import okhttp3.Request
 import java.io.ByteArrayOutputStream
 import java.math.BigInteger
 import java.security.MessageDigest
+import java.util.Arrays
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -149,6 +150,55 @@ private fun decryptStreamChunk(chunk: ByteArray, key: String): ByteArray {
     val decryptedBytes = decryptedStream.toByteArray()
     println("Decrypted chunk size: ${decryptedBytes.size}")
     return decryptedBytes
+}
+
+fun generateTrackUrl(trackId: String, md5Origin: String, mediaVersion: String, quality: Int): String {
+    val magic = 164
+    val step1 = ByteArrayOutputStream()
+    step1.write(md5Origin.toByteArray())
+    step1.write(164)
+    step1.write(quality.toString().toByteArray())
+    step1.write(magic)
+    step1.write(trackId.toByteArray())
+    step1.write(magic)
+    step1.write(mediaVersion.toByteArray())
+
+    val md5 = MessageDigest.getInstance("MD5")
+    md5.update(step1.toByteArray())
+    val digest = md5.digest()
+    val md5hex = bytesToHexTrack(digest).lowercase()
+
+    val step2 = ByteArrayOutputStream()
+    step2.write(md5hex.toByteArray())
+    step2.write(magic)
+    step2.write(step1.toByteArray())
+    step2.write(magic)
+
+    while (step2.size()%16 > 0) step2.write(46)
+
+    val cipher = Cipher.getInstance("AES/ECB/NoPadding")
+    val key = SecretKeySpec("jo6aey6haid2Teih".toByteArray(), "AES")
+    cipher.init(Cipher.ENCRYPT_MODE, key)
+
+    val step3 = StringBuilder()
+    for (i in 0 until step2.size() / 16) {
+        val b = Arrays.copyOfRange(step2.toByteArray(), i*16, (i+1)*16)
+        step3.append(bytesToHexTrack(cipher.doFinal(b)).lowercase())
+    }
+
+    val url = "https://e-cdns-proxy-" + md5Origin[0] + ".dzcdn.net/mobile/1/" + step3.toString()
+    return url
+}
+
+private fun bytesToHexTrack(bytes: ByteArray): String {
+    val HEX_ARRAY = "0123456789ABCDEF".toCharArray()
+    val hexChars = CharArray(bytes.size * 2)
+    for (j in bytes.indices) {
+        val v = bytes[j].toInt() and 0xFF
+        hexChars[j * 2] = HEX_ARRAY[v ushr 4]
+        hexChars[j * 2 + 1] = HEX_ARRAY[v and 0x0F]
+    }
+    return String(hexChars)
 }
 
 fun <T> moveElement(array: Array<T>, fromIndex: Int, toIndex: Int): Array<T> {

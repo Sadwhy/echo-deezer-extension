@@ -41,7 +41,7 @@ import org.apache.http.conn.ConnectTimeoutException
 import java.util.Locale
 
 class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClient, AlbumClient, ArtistClient,
-    PlaylistClient, ShareClient, LoginClient.WebView, LoginClient.UsernamePassword, LoginClient.CustomTextInput,
+    PlaylistClient, ShareClient, LoginClient.WebView.Cookie, LoginClient.UsernamePassword, LoginClient.CustomTextInput,
     LibraryClient {
 
     private val json = Json {
@@ -376,27 +376,53 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         } else {
             DeezerApi().getMediaUrl(track, useFlac)
         }
-        val dataObject = jsonObject["data"]!!.jsonArray.first().jsonObject
-        val mediaObject = dataObject["media"]!!.jsonArray.first().jsonObject
-        val sourcesObject = mediaObject["sources"]!!.jsonArray[0]
-        val url = sourcesObject.jsonObject["url"]!!.jsonPrimitive.content
         val key = Utils.createBlowfishKey(trackId = track.id)
 
-        Track(
-            id = track.id,
-            title = track.title,
-            cover = track.cover,
-            artists = track.artists,
-            audioStreamables = listOf(
-                Streamable(
-                    id = url,
-                    quality = 0,
-                    extra = mapOf(
-                        "key" to key
+        if(jsonObject.toString().contains("Track token has no sufficient rights on requested media")) {
+            val trackObject = DeezerApi().track(arrayOf(track))
+            val resultObject = trackObject["results"]!!.jsonObject
+            val dataObject = resultObject["data"]!!.jsonArray[0].jsonObject
+            val md5Origin = dataObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
+            val mediaVersion = dataObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
+            val url = generateTrackUrl(track.id, md5Origin, mediaVersion, 1)
+
+            Track(
+                id = track.id,
+                title = track.title,
+                cover = track.cover,
+                artists = track.artists,
+                audioStreamables = listOf(
+                    Streamable(
+                        id = url,
+                        quality = 0,
+                        extra = mapOf(
+                            "key" to key
+                        )
                     )
                 )
             )
-        )
+        } else {
+            val dataObject = jsonObject["data"]!!.jsonArray.first().jsonObject
+            val mediaObject = dataObject["media"]!!.jsonArray.first().jsonObject
+            val sourcesObject = mediaObject["sources"]!!.jsonArray[0]
+            val url = sourcesObject.jsonObject["url"]!!.jsonPrimitive.content
+
+            Track(
+                id = track.id,
+                title = track.title,
+                cover = track.cover,
+                artists = track.artists,
+                audioStreamables = listOf(
+                    Streamable(
+                        id = url,
+                        quality = 0,
+                        extra = mapOf(
+                            "key" to key
+                        )
+                    )
+                )
+            )
+        }
     }
 
     override fun getMediaItems(track: Track): PagedData<MediaItemsContainer> = getMediaItems(track.artists.first())
@@ -517,10 +543,10 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
 
     override val loginWebViewStopUrlRegex = "https://www\\.deezer\\.com/account/.*".toRegex()
 
-    override suspend fun onLoginWebviewStop(url: String, cookie: String): List<User> {
-        if (cookie.contains("arl=")) {
-            DeezerCredentials.arl = cookie.substringAfter("arl=").substringBefore(";")
-            DeezerCredentials.sid = cookie.substringAfter("sid=").substringBefore(";")
+    override suspend fun onLoginWebviewStop(url: String, data: String): List<User> {
+        if (data.contains("arl=")) {
+            DeezerCredentials.arl = data.substringAfter("arl=").substringBefore(";")
+            DeezerCredentials.sid = data.substringAfter("sid=").substringBefore(";")
             val userList = DeezerApi().makeUser()
             return userList
         } else {
