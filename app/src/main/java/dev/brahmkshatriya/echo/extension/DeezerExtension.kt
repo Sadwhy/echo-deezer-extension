@@ -1,6 +1,5 @@
 package dev.brahmkshatriya.echo.extension
 
-import android.util.Log
 import dev.brahmkshatriya.echo.common.clients.AlbumClient
 import dev.brahmkshatriya.echo.common.clients.ArtistClient
 import dev.brahmkshatriya.echo.common.clients.ExtensionClient
@@ -15,7 +14,6 @@ import dev.brahmkshatriya.echo.common.exceptions.LoginRequiredException
 import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Artist
-import dev.brahmkshatriya.echo.common.models.EchoMediaItem.Companion.toMediaItem
 import dev.brahmkshatriya.echo.common.models.ExtensionType
 import dev.brahmkshatriya.echo.common.models.MediaItemsContainer
 import dev.brahmkshatriya.echo.common.models.Playlist
@@ -26,10 +24,8 @@ import dev.brahmkshatriya.echo.common.models.Tab
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.common.models.User
 import dev.brahmkshatriya.echo.common.settings.Setting
-import dev.brahmkshatriya.echo.common.settings.SettingItem
 import dev.brahmkshatriya.echo.common.settings.SettingSwitch
 import dev.brahmkshatriya.echo.common.settings.Settings
-import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -37,6 +33,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.apache.http.conn.ConnectTimeoutException
 import java.util.Locale
 
@@ -384,7 +381,17 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
             val dataObject = resultObject["data"]!!.jsonArray[0].jsonObject
             val md5Origin = dataObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
             val mediaVersion = dataObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
-            val url = generateTrackUrl(track.id, md5Origin, mediaVersion, 1)
+            var url = generateTrackUrl(track.id, md5Origin, mediaVersion, 1)
+
+            val request = Request.Builder().url(url).build()
+            val code = client.newCall(request).execute().code
+            if(code == 403) {
+                val fallbackObject = dataObject["FALLBACK"]!!.jsonObject
+                val backId = fallbackObject["SNG_ID"]?.jsonPrimitive?.content ?: ""
+                val backMd5Origin = fallbackObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
+                val backMediaVersion = fallbackObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
+                url = generateTrackUrl(backId, backMd5Origin, backMediaVersion, 1)
+            }
 
             Track(
                 id = track.id,
@@ -596,13 +603,13 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
 
     //<============= Share =============>
 
-    override suspend fun onShare(album: Album): String = "https://www.deezer.com/us/album/${album.id}"
+    override suspend fun onShare(album: Album): String = "https://www.deezer.com/album/${album.id}"
 
-    override suspend fun onShare(artist: Artist): String = "https://www.deezer.com/us/artist/${artist.id}"
+    override suspend fun onShare(artist: Artist): String = "https://www.deezer.com/artist/${artist.id}"
 
-    override suspend fun onShare(playlist: Playlist): String = "https://www.deezer.com/us/playlist/${playlist.id}"
+    override suspend fun onShare(playlist: Playlist): String = "https://www.deezer.com/playlist/${playlist.id}"
 
-    override suspend fun onShare(track: Track): String = "https://www.deezer.com/us/track/${track.id}"
+    override suspend fun onShare(track: Track): String = "https://www.deezer.com/track/${track.id}"
 
-    override suspend fun onShare(user: User): String = "https://www.deezer.com/us/profile/${user.id}"
+    override suspend fun onShare(user: User): String = "https://www.deezer.com/profile/${user.id}"
 }

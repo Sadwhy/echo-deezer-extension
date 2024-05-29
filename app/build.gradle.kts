@@ -13,7 +13,7 @@ android {
         val name = "Deezer"
         val version = "1.0.0"
         val description = "Deezer Extension for Echo."
-        val author = "luft"
+        val author = "LuftVerbot"
         val iconUrl = "https://e-cdn-files.dzcdn.net/cache/images/common/favicon/favicon-240x240.bb3a6a29ad16a77f10cb.png"
 
         applicationId = "dev.brahmkshatriya.echo.extension.deezer"
