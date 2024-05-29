@@ -52,6 +52,12 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
             "flac",
             "Use FLAC if available (loading takes longer)",
             false
+        ),
+        SettingSwitch(
+            "Use 128kbps",
+            "128",
+            "Use 128kbps(overrides FLAC option)",
+            false
         )
     )
 
@@ -62,6 +68,9 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
 
     private val useFlac
         get() = settings.getBoolean("flac") ?: false
+
+    private val use128
+        get() = settings.getBoolean("128") ?: false
 
     private val arl: String
         get() = DeezerCredentials.arl
@@ -371,7 +380,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         val jsonObject = if (track.extras["FILESIZE_MP3_MISC"] != "0" && track.extras["FILESIZE_MP3_MISC"] != null) {
             DeezerApi().getMP3MediaUrl(track)
         } else {
-            DeezerApi().getMediaUrl(track, useFlac)
+            DeezerApi().getMediaUrl(track, useFlac, use128)
         }
         val key = Utils.createBlowfishKey(trackId = track.id)
 

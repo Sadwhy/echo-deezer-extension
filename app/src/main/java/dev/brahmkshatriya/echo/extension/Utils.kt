@@ -15,6 +15,7 @@ import java.util.Arrays
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
+import kotlin.math.min
 
 object Utils {
     private const val SECRET = "g4el58wc0zvf9na1"
@@ -94,8 +95,8 @@ fun getByteStreamAudio(streamable: Streamable, client: OkHttpClient): Streamable
             println("Total bytes read: ${completeStreamBytes.size}")
 
             // Determine chunk size based on decryption block size
-            val decryptionBlockSize = 2048 * 3072 // Increased decryption block size
-            val numChunks = (completeStreamBytes.size + decryptionBlockSize - 1) / decryptionBlockSize
+            val chunkSize = 2048 * 3072
+            val numChunks = (completeStreamBytes.size + chunkSize - 1) / chunkSize
             println("Number of chunks: $numChunks")
 
             // Measure decryption time
@@ -103,8 +104,8 @@ fun getByteStreamAudio(streamable: Streamable, client: OkHttpClient): Streamable
 
             // Decrypt the chunks concurrently
             val deferredChunks = (0 until numChunks).map { i ->
-                val start = i * decryptionBlockSize
-                val end = minOf((i + 1) * decryptionBlockSize, completeStreamBytes.size)
+                val start = i * chunkSize
+                val end = minOf((i + 1) * chunkSize, completeStreamBytes.size)
                 println("Chunk $i: start $start, end $end")
                 async(Dispatchers.Default) { decryptStreamChunk(completeStreamBytes.copyOfRange(start, end), key) }
             }
@@ -134,16 +135,23 @@ private fun decryptStreamChunk(chunk: ByteArray, key: String): ByteArray {
 
     while (place < chunk.size) {
         val remainingBytes = chunk.size - place
-        val currentChunkSize = if (remainingBytes > 2048 * 3) 2048 * 3 else remainingBytes
-        val decryptingChunk = chunk.copyOfRange(place, place + currentChunkSize)
+        val blockSize = 2048
+        val encryptedBlock = blockSize * 3 // Every third block is encrypted
+
+        val currentChunkSize = min(remainingBytes, encryptedBlock)
+        val currentChunk = chunk.copyOfRange(place, place + currentChunkSize)
         place += currentChunkSize
 
-        if (decryptingChunk.size > 2048) {
-            val decryptedChunk = Utils.decryptBlowfish(decryptingChunk.copyOfRange(0, 2048), key)
-            decryptedStream.write(decryptedChunk)
-            decryptedStream.write(decryptingChunk, 2048, decryptingChunk.size - 2048)
-        } else {
-            decryptedStream.write(decryptingChunk)
+        for (i in 0 until currentChunk.size step blockSize) {
+            val blockEnd = min(currentChunk.size, i + blockSize)
+            val block = currentChunk.copyOfRange(i, blockEnd)
+
+            if ((i / blockSize) % 3 == 0 && block.size == blockSize) {
+                val decryptedBlock = Utils.decryptBlowfish(block, key)
+                decryptedStream.write(decryptedBlock)
+            } else {
+                decryptedStream.write(block)
+            }
         }
     }
 

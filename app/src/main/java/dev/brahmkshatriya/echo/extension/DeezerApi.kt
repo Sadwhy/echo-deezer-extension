@@ -315,7 +315,7 @@ class DeezerApi {
         jObject
     }
 
-    suspend fun getMediaUrl(track: Track, useFlac: Boolean): JsonObject = withContext(Dispatchers.IO) {
+    suspend fun getMediaUrl(track: Track, useFlac: Boolean, use128: Boolean): JsonObject = withContext(Dispatchers.IO) {
         val urlBuilder = HttpUrl.Builder()
             .scheme("https")
             .host("dzmedia.fly.dev")
@@ -325,10 +325,14 @@ class DeezerApi {
 
         // Create request body
         val requestBody = JSONObject(mapOf(
-            if(useFlac) {
-                "formats" to arrayOf("FLAC", "MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
+            if(use128) {
+                "formats" to arrayOf("MP3_128", "MP3_64", "MP3_MISC")
             } else {
-                "formats" to arrayOf("MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
+                if (useFlac) {
+                    "formats" to arrayOf("FLAC", "MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
+                } else {
+                    "formats" to arrayOf("MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
+                }
             },
             "ids" to arrayOf(track.id.toLong())
         )).toString().toRequestBody("application/json; charset=utf-8".toMediaType())
