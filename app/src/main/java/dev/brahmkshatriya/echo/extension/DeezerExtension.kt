@@ -29,6 +29,7 @@ import dev.brahmkshatriya.echo.common.settings.Settings
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -377,68 +378,72 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     override suspend fun getStreamableVideo(streamable: Streamable) = throw Exception("not Used")
 
     override suspend fun loadTrack(track: Track) = coroutineScope {
+        val api = DeezerApi()
         val jsonObject = if (track.extras["FILESIZE_MP3_MISC"] != "0" && track.extras["FILESIZE_MP3_MISC"] != null) {
-            DeezerApi().getMP3MediaUrl(track)
+            api.getMP3MediaUrl(track)
         } else {
-            DeezerApi().getMediaUrl(track, useFlac, use128)
+            api.getMediaUrl(track, useFlac, use128)
         }
-        val key = Utils.createBlowfishKey(trackId = track.id)
 
-        if(jsonObject.toString().contains("Track token has no sufficient rights on requested media")) {
-            val trackObject = DeezerApi().track(arrayOf(track))
-            val resultObject = trackObject["results"]!!.jsonObject
-            val dataObject = resultObject["data"]!!.jsonArray[0].jsonObject
-            val md5Origin = dataObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
-            val mediaVersion = dataObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
-            var url = generateTrackUrl(track.id, md5Origin, mediaVersion, 1)
+        val key = Utils.createBlowfishKey(track.id)
 
+        suspend fun fetchTrackData(track: Track): JsonObject {
+            val trackObject = api.track(arrayOf(track))
+            return trackObject["results"]!!.jsonObject["data"]!!.jsonArray[0].jsonObject
+        }
+
+        suspend fun generateUrl(trackId: String, md5Origin: String, mediaVersion: String): String {
+            var url = generateTrackUrl(trackId, md5Origin, mediaVersion, 1)
             val request = Request.Builder().url(url).build()
             val code = client.newCall(request).execute().code
-            if(code == 403) {
-                val fallbackObject = dataObject["FALLBACK"]!!.jsonObject
+            if (code == 403) {
+                val fallbackObject = fetchTrackData(track)["FALLBACK"]!!.jsonObject
                 val backId = fallbackObject["SNG_ID"]?.jsonPrimitive?.content ?: ""
                 val backMd5Origin = fallbackObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
                 val backMediaVersion = fallbackObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
                 url = generateTrackUrl(backId, backMd5Origin, backMediaVersion, 1)
             }
-
-            Track(
-                id = track.id,
-                title = track.title,
-                cover = track.cover,
-                artists = track.artists,
-                audioStreamables = listOf(
-                    Streamable(
-                        id = url,
-                        quality = 0,
-                        extra = mapOf(
-                            "key" to key
-                        )
-                    )
-                )
-            )
-        } else {
-            val dataObject = jsonObject["data"]!!.jsonArray.first().jsonObject
-            val mediaObject = dataObject["media"]!!.jsonArray.first().jsonObject
-            val sourcesObject = mediaObject["sources"]!!.jsonArray[0]
-            val url = sourcesObject.jsonObject["url"]!!.jsonPrimitive.content
-
-            Track(
-                id = track.id,
-                title = track.title,
-                cover = track.cover,
-                artists = track.artists,
-                audioStreamables = listOf(
-                    Streamable(
-                        id = url,
-                        quality = 0,
-                        extra = mapOf(
-                            "key" to key
-                        )
-                    )
-                )
-            )
+            return url
         }
+
+        val url = when {
+            jsonObject.toString().contains("Track token has no sufficient rights on requested media") -> {
+                val dataObject = fetchTrackData(track)
+                val md5Origin = dataObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
+                val mediaVersion = dataObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
+                generateUrl(track.id, md5Origin, mediaVersion)
+            }
+            jsonObject["data"]!!.jsonArray.first().jsonObject["media"]?.jsonArray?.isEmpty() == true -> {
+                val dataObject = fetchTrackData(track)
+                val fallbackObject = dataObject["FALLBACK"]!!.jsonObject
+                val backId = fallbackObject["SNG_ID"]?.jsonPrimitive?.content ?: ""
+                val newTrack = track.copy(id = backId)
+                val newDataObject = fetchTrackData(newTrack)
+                val md5Origin = newDataObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
+                val mediaVersion = newDataObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
+                generateUrl(newTrack.id, md5Origin, mediaVersion)
+            }
+            else -> {
+                val dataObject = jsonObject["data"]!!.jsonArray.first().jsonObject
+                val mediaObject = dataObject["media"]!!.jsonArray.first().jsonObject
+                val sourcesObject = mediaObject["sources"]!!.jsonArray[0]
+                sourcesObject.jsonObject["url"]!!.jsonPrimitive.content
+            }
+        }
+
+        Track(
+            id = track.id,
+            title = track.title,
+            cover = track.cover,
+            artists = track.artists,
+            audioStreamables = listOf(
+                Streamable(
+                    id = url,
+                    quality = 0,
+                    extra = mapOf("key" to key)
+                )
+            )
+        )
     }
 
     override fun getMediaItems(track: Track): PagedData<MediaItemsContainer> = getMediaItems(track.artists.first())
