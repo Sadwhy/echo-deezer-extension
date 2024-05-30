@@ -22,6 +22,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.json.JSONObject
 import java.math.BigInteger
+import java.net.InetSocketAddress
+import java.net.Proxy
 import java.security.MessageDigest
 import java.util.zip.GZIPInputStream
 
@@ -58,6 +60,7 @@ class DeezerApi {
         get() = DeezerCredentials.pass
 
     private val client: OkHttpClient = OkHttpClient.Builder()
+        .proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress.createUnresolved("uk.proxy.murglar.app", 3128)))
         .addInterceptor { chain ->
             val originalResponse = chain.proceed(chain.request())
             if (originalResponse.header("Content-Encoding") == "gzip") {
@@ -128,7 +131,7 @@ class DeezerApi {
             requestBuilder.get()
         }
         requestBuilder.headers(getHeaders(method))
-        val  request = requestBuilder.build()
+        val request = requestBuilder.build()
 
         // Execute request
         val response = client.newCall(request).execute()
