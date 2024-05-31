@@ -1,5 +1,7 @@
 package dev.brahmkshatriya.echo.extension
 
+import android.annotation.TargetApi
+import android.os.Build
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.EchoMediaItem
@@ -15,6 +17,8 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.time.Instant
+import java.util.Date
 
 
 fun JsonElement.toMediaItemsContainer(
@@ -72,6 +76,7 @@ fun JsonElement.toAlbum(): Album {
         id = data["ALB_ID"]?.jsonPrimitive?.content ?: "",
         title = data["ALB_TITLE"]?.jsonPrimitive?.content ?: "",
         cover = getCover(md5, "cover"),
+        tracks = jsonObject["SONGS"]?.jsonObject?.get("total")?.jsonPrimitive?.int,
         artists = listOf(
             Artist(
                 id = artistObject?.get("ART_ID")?.jsonPrimitive?.content ?: "",
@@ -96,6 +101,7 @@ fun JsonElement.toArtist(): Artist {
     )
 }
 
+@TargetApi(Build.VERSION_CODES.O)
 fun JsonElement.toTrack(): Track {
     val data = jsonObject["data"]?.jsonObject ?: jsonObject
     val md5 = data["ALB_PICTURE"]?.jsonPrimitive?.content ?: ""
@@ -105,6 +111,8 @@ fun JsonElement.toTrack(): Track {
         id = data["SNG_ID"]!!.jsonPrimitive.content,
         title = data["SNG_TITLE"]!!.jsonPrimitive.content,
         cover = getCover(md5, "cover"),
+        duration = data["DURATION"]?.jsonPrimitive?.content?.toLong()?.times(1000),
+        releaseDate = Date.from(Instant.ofEpochSecond(data["DATE_ADD"]?.jsonPrimitive?.content?.toLong() ?: 0)).toString(),
         artists = listOf(
             Artist(
                 id = artistObject?.get("ART_ID")?.jsonPrimitive?.content ?: "",

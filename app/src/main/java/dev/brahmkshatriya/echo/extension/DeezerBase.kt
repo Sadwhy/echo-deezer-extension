@@ -12,4 +12,5 @@ object DeezerCredentials {
 
 object DeezerUtils {
     var arl_expired: Boolean = false
+    var proxy: Boolean = false
 }

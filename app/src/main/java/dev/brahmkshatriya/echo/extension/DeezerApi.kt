@@ -59,9 +59,11 @@ class DeezerApi {
     private val pass: String
         get() = DeezerCredentials.pass
 
-    private val client: OkHttpClient = OkHttpClient.Builder()
-        .proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress.createUnresolved("uk.proxy.murglar.app", 3128)))
-        .addInterceptor { chain ->
+    private val proxy: Boolean
+        get() = DeezerUtils.proxy
+
+    private val client: OkHttpClient = OkHttpClient.Builder().apply {
+        addInterceptor { chain ->
             val originalResponse = chain.proceed(chain.request())
             if (originalResponse.header("Content-Encoding") == "gzip") {
                 val gzipSource = GZIPInputStream(originalResponse.body?.byteStream())
@@ -70,7 +72,11 @@ class DeezerApi {
             } else {
                 originalResponse
             }
-        }.build()
+        }
+        if(proxy) {
+            proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress.createUnresolved("uk.proxy.murglar.app", 3128)))
+        }
+    }.build()
 
     private val json = Json {
         isLenient = true
