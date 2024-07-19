@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.math.BigInteger
 import java.security.MessageDigest
 import java.util.Arrays
@@ -81,45 +82,49 @@ fun getByteStreamAudio(streamable: Streamable, client: OkHttpClient): Streamable
         withContext(Dispatchers.IO) {
             val response = client.newCall(request).execute()
             val byteStream = response.body?.byteStream()
+                ?: throw IOException("Failed to get byte stream from response")
 
-            // Read the entire byte stream into memory
-            val completeStream = ByteArrayOutputStream()
-            val buffer = ByteArray(2 * 1024 * 1024) // Increased buffer size
-            var bytesRead: Int
-            while (byteStream?.read(buffer).also { bytesRead = it ?: -1 } != -1) {
-                completeStream.write(buffer, 0, bytesRead)
+            try {
+                // Read the entire byte stream into memory
+                val completeStream = ByteArrayOutputStream()
+                val buffer = ByteArray(2 * 1024 * 1024) // Increased buffer size
+                var bytesRead: Int
+                while (byteStream.read(buffer).also { bytesRead = it } != -1) {
+                    completeStream.write(buffer, 0, bytesRead)
+                }
+
+                // Ensure complete stream is read
+                val completeStreamBytes = completeStream.toByteArray()
+                println("Total bytes read: ${completeStreamBytes.size}")
+
+                // Determine chunk size based on decryption block size
+                val chunkSize = 2048 * 3072
+                val numChunks = (completeStreamBytes.size + chunkSize - 1) / chunkSize
+                println("Number of chunks: $numChunks")
+
+                // Measure decryption time
+                val startTime = System.nanoTime()
+
+                // Decrypt the chunks concurrently
+                val deferredChunks = (0 until numChunks).map { i ->
+                    val start = i * chunkSize
+                    val end = minOf((i + 1) * chunkSize, completeStreamBytes.size)
+                    println("Chunk $i: start $start, end $end")
+                    async(Dispatchers.Default) { decryptStreamChunk(completeStreamBytes.copyOfRange(start, end), key) }
+                }
+
+                // Wait for all decryption tasks to complete and concatenate the results
+                deferredChunks.forEach { deferred ->
+                    decChunk += deferred.await()
+                }
+
+                val endTime = System.nanoTime()
+                val duration = endTime - startTime
+                println("Decryption took ${duration / 1_000_000} milliseconds")
+            } finally {
+                response.close()
+                byteStream.close()
             }
-
-            // Ensure complete stream is read
-            val completeStreamBytes = completeStream.toByteArray()
-            println("Total bytes read: ${completeStreamBytes.size}")
-
-            // Determine chunk size based on decryption block size
-            val chunkSize = 2048 * 3072
-            val numChunks = (completeStreamBytes.size + chunkSize - 1) / chunkSize
-            println("Number of chunks: $numChunks")
-
-            // Measure decryption time
-            val startTime = System.nanoTime()
-
-            // Decrypt the chunks concurrently
-            val deferredChunks = (0 until numChunks).map { i ->
-                val start = i * chunkSize
-                val end = minOf((i + 1) * chunkSize, completeStreamBytes.size)
-                println("Chunk $i: start $start, end $end")
-                async(Dispatchers.Default) { decryptStreamChunk(completeStreamBytes.copyOfRange(start, end), key) }
-            }
-
-            // Wait for all decryption tasks to complete and concatenate the results
-            deferredChunks.forEach { deferred ->
-                decChunk += deferred.await()
-            }
-
-            val endTime = System.nanoTime()
-            val duration = endTime - startTime
-            println("Decryption took ${duration / 1_000_000} milliseconds")
-
-            response.close()
         }
     }
 

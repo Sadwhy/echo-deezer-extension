@@ -59,9 +59,6 @@ class DeezerApi {
     private val pass: String
         get() = DeezerCredentials.pass
 
-    private val proxy: Boolean
-        get() = DeezerUtils.proxy
-
     private val client: OkHttpClient = OkHttpClient.Builder().apply {
         addInterceptor { chain ->
             val originalResponse = chain.proceed(chain.request())
@@ -73,9 +70,7 @@ class DeezerApi {
                 originalResponse
             }
         }
-        if(proxy) {
-            proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress.createUnresolved("uk.proxy.murglar.app", 3128)))
-        }
+        proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress.createUnresolved("uk.proxy.murglar.app", 3128)))
     }.build()
 
     private val json = Json {
