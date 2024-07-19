@@ -73,6 +73,19 @@ class DeezerApi {
         proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress.createUnresolved("uk.proxy.murglar.app", 3128)))
     }.build()
 
+    private val clientNP: OkHttpClient = OkHttpClient.Builder().apply {
+        addInterceptor { chain ->
+            val originalResponse = chain.proceed(chain.request())
+            if (originalResponse.header("Content-Encoding") == "gzip") {
+                val gzipSource = GZIPInputStream(originalResponse.body?.byteStream())
+                val decompressedBody = gzipSource.readBytes().toResponseBody(originalResponse.body?.contentType())
+                originalResponse.newBuilder().body(decompressedBody).build()
+            } else {
+                originalResponse
+            }
+        }
+    }.build()
+
     private val json = Json {
         isLenient = true
         ignoreUnknownKeys = true
@@ -310,7 +323,7 @@ class DeezerApi {
             .build()
 
         // Execute request
-        val response = client.newCall(request).execute()
+        val response = clientNP.newCall(request).execute()
         val responseBody = response.body?.string()
         val body = responseBody.toString()
 
@@ -348,7 +361,7 @@ class DeezerApi {
             .build()
 
         // Execute request
-        val response = client.newCall(request).execute()
+        val response = clientNP.newCall(request).execute()
         val responseBody = response.body?.string()
         val body = responseBody.toString()
 
