@@ -147,7 +147,6 @@ class DeezerApi(private val settings: Settings = Settings()) {
             urlBuilder.addQueryParameter("gateway_input", gatewayInput)
         }
 
-
         val url = urlBuilder.build()
 
         // Create request body
@@ -179,7 +178,7 @@ class DeezerApi(private val settings: Settings = Settings()) {
         }
 
         if(body.contains("\"VALID_TOKEN_REQUIRED\":\"Invalid CSRF token\"")) {
-            if(email == "" && pass == "") {
+            if(email.isEmpty() && pass.isEmpty()) {
                 DeezerUtils.setArlExpired(true)
                 throw Exception("Please re-login (Best use User + Pass method)")
             } else {
