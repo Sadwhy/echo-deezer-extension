@@ -33,31 +33,49 @@ class Settings {
     val deezerCountry: String = "US"
 }
 
-class DeezerApi {
+class DeezerApi(private val settings: Settings = Settings()) {
 
-    private val settings = Settings()
+    init {
+        // Ensure credentials are initialized when the API is first used
+        if (DeezerCredentialsHolder.credentials == null) {
+            // Example initialization with placeholder values
+            DeezerCredentialsHolder.initialize(
+                DeezerCredentials(
+                    arl = "",
+                    sid = "",
+                    token = "",
+                    userId = "",
+                    licenseToken = "",
+                    email = "",
+                    pass = ""
+                )
+            )
+        }
+    }
 
-    // Access shared email and pass
+    private val credentials: DeezerCredentials
+        get() = DeezerCredentialsHolder.credentials ?: throw IllegalStateException("DeezerCredentials not initialized")
+
     private val arl: String
-        get() = DeezerCredentials.arl
+        get() = credentials.arl
 
     private val sid: String
-        get() = DeezerCredentials.sid
+        get() = credentials.sid
 
     private val token: String
-        get() = DeezerCredentials.token
+        get() = credentials.token
 
     private val userId: String
-        get() = DeezerCredentials.userId
+        get() = credentials.userId
 
     private val licenseToken: String
-        get() = DeezerCredentials.licenseToken
+        get() = credentials.licenseToken
 
     private val email: String
-        get() = DeezerCredentials.email
+        get() = credentials.email
 
     private val pass: String
-        get() = DeezerCredentials.pass
+        get() = credentials.pass
 
     private val client: OkHttpClient = OkHttpClient.Builder().apply {
         addInterceptor { chain ->
@@ -155,17 +173,17 @@ class DeezerApi {
         if (method == "deezer.getUserData") {
             response.headers.forEach {
                 if (it.second.startsWith("sid=")) {
-                    DeezerCredentials.sid = it.second.substringAfter("sid=").substringBefore(";")
+                    DeezerCredentialsHolder.updateCredentials(sid = it.second.substringAfter("sid=").substringBefore(";"))
                 }
             }
         }
 
         if(body.contains("\"VALID_TOKEN_REQUIRED\":\"Invalid CSRF token\"")) {
             if(email == "" && pass == "") {
-                DeezerUtils.arl_expired = true
+                DeezerUtils.setArlExpired(true)
                 throw Exception("Please re-login (Best use User + Pass method)")
             } else {
-                DeezerUtils.arl_expired = false
+                DeezerUtils.setArlExpired(false)
                 val userList = DeezerExtension().onLogin(email, pass)
                 DeezerExtension().onSetLoginUser(userList.first())
                 return@withContext callApi(method, params, gatewayInput)
@@ -222,12 +240,12 @@ class DeezerApi {
         //Get access token
         val responseJson = getToken(params)
         val apiResponse = json.decodeFromString<JsonObject>(responseJson)
-        DeezerCredentials.token = apiResponse.jsonObject["access_token"]!!.jsonPrimitive.content
+        DeezerCredentialsHolder.updateCredentials(token = apiResponse.jsonObject["access_token"]!!.jsonPrimitive.content)
 
         // Get ARL
         val arlResponse = callApi("user.getArl")
         val arlObject = json.decodeFromString<JsonObject>(arlResponse)
-        DeezerCredentials.arl = arlObject["results"]!!.jsonPrimitive.content
+        DeezerCredentialsHolder.updateCredentials(arl = arlObject["results"]!!.jsonPrimitive.content)
     }
 
     private fun md5(input: String): String {
@@ -270,7 +288,7 @@ class DeezerApi {
         val response = client.newCall(request).execute()
         response.headers.forEach {
             if (it.second.startsWith("sid=")) {
-               DeezerCredentials.sid = it.second.substringAfter("sid=").substringBefore(";")
+                DeezerCredentialsHolder.updateCredentials(sid = it.second.substringAfter("sid=").substringBefore(";"))
             }
         }
      }

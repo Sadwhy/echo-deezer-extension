@@ -62,6 +62,29 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         ),
     )
 
+    init {
+        // Ensure credentials are initialized when the API is first used
+        if (DeezerCredentialsHolder.credentials == null) {
+            // Example initialization with placeholder values
+            DeezerCredentialsHolder.initialize(
+                DeezerCredentials(
+                    arl = "",
+                    sid = "",
+                    token = "",
+                    userId = "",
+                    licenseToken = "",
+                    email = "",
+                    pass = ""
+                )
+            )
+        }
+    }
+
+    private val credentials: DeezerCredentials
+        get() = DeezerCredentialsHolder.credentials ?: throw IllegalStateException("DeezerCredentials not initialized")
+    private val utils: DeezerUtils
+        get() = DeezerUtils
+
     private lateinit var settings: Settings
     override fun setSettings(settings: Settings) {
         this.settings = settings
@@ -74,10 +97,10 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         get() = settings.getBoolean("128") ?: false
 
     private val arl: String
-        get() = DeezerCredentials.arl
+        get() = credentials.arl
 
     private val arlExpired: Boolean
-        get() = DeezerUtils.arl_expired
+        get() = utils.arlExpired
 
     override suspend fun onExtensionSelected() {}
 
@@ -565,8 +588,8 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
 
     override suspend fun onLoginWebviewStop(url: String, data: String): List<User> {
         if (data.contains("arl=")) {
-            DeezerCredentials.arl = data.substringAfter("arl=").substringBefore(";")
-            DeezerCredentials.sid = data.substringAfter("sid=").substringBefore(";")
+            DeezerCredentialsHolder.updateCredentials(arl = data.substringAfter("arl=").substringBefore(";"))
+            DeezerCredentialsHolder.updateCredentials(sid = data.substringAfter("sid=").substringBefore(";"))
             val userList = DeezerApi().makeUser()
             return userList
         } else {
@@ -586,7 +609,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         )
 
     override suspend fun onLogin(data: Map<String, String?>): List<User> {
-        DeezerCredentials.arl = data["arl"] ?: ""
+        DeezerCredentialsHolder.updateCredentials(arl = data["arl"] ?: "")
         DeezerApi().getSid()
         val userList = DeezerApi().makeUser()
         return userList
@@ -594,8 +617,8 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
 
     override suspend fun onLogin(username: String, password: String): List<User> {
         // Set shared credentials
-        DeezerCredentials.email = username
-        DeezerCredentials.pass = password
+        DeezerCredentialsHolder.updateCredentials(email = username)
+        DeezerCredentialsHolder.updateCredentials(pass = password)
 
         DeezerApi().getArlByEmail(username, password)
         val userList = DeezerApi().makeUser(username, password)
@@ -604,13 +627,13 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
 
     override suspend fun onSetLoginUser(user: User?) {
         if (user != null) {
-            DeezerCredentials.arl = user.extras["arl"] ?: ""
-            DeezerCredentials.userId = user.extras["user_id"] ?: ""
-            DeezerCredentials.sid = user.extras["sid"] ?: ""
-            DeezerCredentials.token = user.extras["token"] ?: ""
-            DeezerCredentials.licenseToken = user.extras["license_token"] ?: ""
-            DeezerCredentials.email = user.extras["email"] ?: ""
-            DeezerCredentials.pass = user.extras["pass"] ?: ""
+            DeezerCredentialsHolder.updateCredentials(arl = user.extras["arl"] ?: "")
+            DeezerCredentialsHolder.updateCredentials(userId = user.extras["user_id"] ?: "")
+            DeezerCredentialsHolder.updateCredentials(sid = user.extras["sid"] ?: "")
+            DeezerCredentialsHolder.updateCredentials(token = user.extras["token"] ?: "")
+            DeezerCredentialsHolder.updateCredentials(licenseToken = user.extras["license_token"] ?: "")
+            DeezerCredentialsHolder.updateCredentials(email = user.extras["email"] ?: "")
+            DeezerCredentialsHolder.updateCredentials(pass = user.extras["pass"] ?: "")
         }
     }
 

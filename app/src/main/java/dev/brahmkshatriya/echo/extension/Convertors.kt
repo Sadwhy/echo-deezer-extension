@@ -20,7 +20,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.time.Instant
 import java.util.Date
 
-
 fun JsonElement.toMediaItemsContainer(
     name: String?
 ): MediaItemsContainer {
@@ -137,7 +136,7 @@ fun JsonElement.toPlaylist(): Playlist {
         cover = getCover(md5, type),
         description = data["DESCRIPTION"]?.jsonPrimitive?.content ?: "",
         subtitle = jsonObject["subtitle"]?.jsonPrimitive?.content ?: "",
-        isEditable = data["PARENT_USER_ID"]!!.jsonPrimitive.content == DeezerCredentials.userId,
+        isEditable = data["PARENT_USER_ID"]!!.jsonPrimitive.content == DeezerCredentialsHolder.credentials?.userId,
         tracks = data["NB_SONG"]?.jsonPrimitive?.int ?: 0,
     )
 }
