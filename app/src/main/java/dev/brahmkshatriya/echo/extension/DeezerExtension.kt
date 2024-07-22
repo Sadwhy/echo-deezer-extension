@@ -113,7 +113,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     override suspend fun getHomeTabs() = listOf<Tab>()
 
     override fun getHomeFeed(tab: Tab?): PagedData<MediaItemsContainer> = PagedData.Continuous {
-        if(arl == "" || arlExpired) throw loginRequiredException
+        if(arl.isEmpty() || arlExpired) throw loginRequiredException
         val dataList = mutableListOf<MediaItemsContainer>()
         val jObject = api.homePage()
         val resultObject = jObject["results"]!!.jsonObject
@@ -207,12 +207,12 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override suspend fun addTracksToPlaylist(playlist: Playlist, tracks: List<Track>, index: Int, new: List<Track>) {
-        if(arl == "" || arlExpired) throw loginRequiredException
+        if(arl.isEmpty() || arlExpired) throw loginRequiredException
         api.addToPlaylist(playlist, new)
     }
 
     override suspend fun createPlaylist(title: String, description: String?): Playlist {
-        if(arl == "" || arlExpired) throw loginRequiredException
+        if(arl.isEmpty() || arlExpired) throw loginRequiredException
         val jsonObject = api.createPlaylist(title, description)
         val id = jsonObject["results"]?.jsonPrimitive?.content ?: ""
         val playlist = Playlist(
@@ -225,17 +225,17 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override suspend fun deletePlaylist(playlist: Playlist) {
-        if(arl == "" || arlExpired) throw loginRequiredException
+        if(arl.isEmpty() || arlExpired) throw loginRequiredException
         api.deletePlaylist(playlist.id)
     }
 
     override suspend fun editPlaylistMetadata(playlist: Playlist, title: String, description: String?) {
-        if(arl == "" || arlExpired) throw loginRequiredException
+        if(arl.isEmpty() || arlExpired) throw loginRequiredException
         api.updatePlaylist(playlist.id, title, description)
     }
 
     override suspend fun likeTrack(track: Track, liked: Boolean): Boolean {
-        if(arl == "" || arlExpired) throw loginRequiredException
+        if(arl.isEmpty() || arlExpired) throw loginRequiredException
         if(liked) {
             api.addFavoriteTrack(track.id)
             return true
@@ -246,7 +246,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override suspend fun listEditablePlaylists(): List<Playlist> {
-        if(arl == "" || arlExpired) throw loginRequiredException
+        if(arl.isEmpty() || arlExpired) throw loginRequiredException
         val playlistList = mutableListOf<Playlist>()
         val jsonObject = api.getPlaylists()
         val resultObject = jsonObject["results"]!!.jsonObject
@@ -264,83 +264,97 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override suspend fun moveTrackInPlaylist(playlist: Playlist, tracks: List<Track>, fromIndex: Int, toIndex: Int) {
-        if(arl == "" || arlExpired) throw loginRequiredException
+        if(arl.isEmpty() || arlExpired) throw loginRequiredException
         val idArray = tracks.map { it.id }.toTypedArray()
         val newIdArray = moveElement(idArray, fromIndex, toIndex)
         api.updatePlaylistOrder(playlist.id, newIdArray)
     }
 
     override suspend fun removeTracksFromPlaylist(playlist: Playlist, tracks: List<Track>, indexes: List<Int>) {
-        if(arl == "" || arlExpired) throw loginRequiredException
+        if(arl.isEmpty() || arlExpired) throw loginRequiredException
         api.removeFromPlaylist(playlist, tracks, indexes)
     }
 
     //<============= Search =============>
 
-    override suspend fun quickSearch(query: String?) = query?.run {
-        try {
-            val jsonObject = api.searchSuggestions(query)
-            val resultObject = jsonObject["results"]!!.jsonObject
-            val suggestionArray = resultObject["SUGGESTION"]!!.jsonArray
-            suggestionArray.map { item ->
-                val queryItem = item.jsonObject["QUERY"]!!.jsonPrimitive.content
-                QuickSearchItem.SearchQueryItem(queryItem, false)
-            }
-        } catch (e: NullPointerException) {
-            null
-        } catch (e: ConnectTimeoutException) {
-            null
+    override suspend fun quickSearch(query: String?) = query?.let {
+        runCatching {
+            val jsonObject = api.searchSuggestions(it)
+            val resultObject = jsonObject["results"]?.jsonObject
+            val suggestionArray = resultObject?.get("SUGGESTION")?.jsonArray
+            suggestionArray?.mapNotNull { item ->
+                val queryItem = item.jsonObject["QUERY"]?.jsonPrimitive?.content
+                queryItem?.let { QuickSearchItem.SearchQueryItem(it, false) }
+            } ?: emptyList()
+        }.getOrElse {
+            emptyList()
         }
-    } ?: listOf()
+    } ?: emptyList()
 
     private var oldSearch: Pair<String, List<MediaItemsContainer>>? = null
+
     override fun searchFeed(query: String?, tab: Tab?) = PagedData.Single {
-        if(arl == "" || arlExpired) throw loginRequiredException
-        query ?: return@Single emptyList()
-        val old = oldSearch?.takeIf {
-            it.first == query && (tab == null || tab.id == "All")
-        }?.second
-        if (old != null) return@Single old
+        if (arl.isEmpty() || arlExpired) throw loginRequiredException
+        query ?: return@Single browseFeed()
 
-        var list = listOf<MediaItemsContainer>()
-        if(tab?.id != "TOP_RESULT") {
-            val jsonObject = api.search(query)
-            val resultObject = jsonObject["results"]!!.jsonObject
-            val tabObject = resultObject[tab?.id]!!.jsonObject
-            val dataArray = tabObject["data"]!!.jsonArray
-
-            val itemArray =  dataArray.mapNotNull { item ->
-                item.toEchoMediaItem()?.toMediaItemsContainer()
-            }
-            list = itemArray
+        oldSearch?.takeIf { it.first == query && (tab == null || tab.id == "All") }?.second?.let {
+            return@Single it
         }
-        list
+
+        if (tab?.id == "TOP_RESULT") return@Single emptyList()
+
+        val jsonObject = api.search(query)
+        val resultObject = jsonObject["results"]?.jsonObject
+        val tabObject = resultObject?.get(tab?.id ?: "")?.jsonObject
+        val dataArray = tabObject?.get("data")?.jsonArray
+
+        dataArray?.mapNotNull { item ->
+            item.toEchoMediaItem()?.toMediaItemsContainer()
+        } ?: emptyList()
+    }
+
+    private suspend fun browseFeed(): List<MediaItemsContainer> {
+        val dataList = mutableListOf<MediaItemsContainer>()
+        val jsonObject = api.browsePage()
+        val resultObject = jsonObject["results"]!!.jsonObject
+        val sections = resultObject["sections"]!!.jsonArray
+        val jsonData = json.decodeFromString<JsonArray>(sections.toString())
+        jsonData.map { section ->
+            val id = section.jsonObject["module_id"]!!.jsonPrimitive.content
+            // Just for the time being until everything is implemented
+            if (id == "67aa1c1b-7873-488d-88a0-55b6596cf4d6" ||
+                id == "486313b7-e3c7-453d-ba79-27dc6bea20ce" ||
+                id == "1d8dfed4-582f-40e1-b29c-760b44c0301e") {
+                val name = section.jsonObject["title"]!!.jsonPrimitive.content
+                val data = section.toMediaItemsContainer(name = name)
+                dataList.add(data)
+            }
+        }
+        return dataList
     }
 
     override suspend fun searchTabs(query: String?): List<Tab> {
-        if (arl == "" || arlExpired) return emptyList()
+        if (arl.isEmpty() || arlExpired) return emptyList()
         query ?: return emptyList()
+
         val jsonObject = api.search(query)
-        val resultObject = jsonObject["results"]!!.jsonObject
-        val orderObject = resultObject["ORDER"]!!.jsonArray
+        val resultObject = jsonObject["results"]?.jsonObject
+        val orderObject = resultObject?.get("ORDER")?.jsonArray
 
-        val tabs = orderObject.mapNotNull {
-            val tab = it.jsonPrimitive.content
-            Tab(
-                id = tab,
-                name = tab.lowercase().capitalize(Locale.ROOT)
-            )
-        }.filter {
-            it.id != "TOP_RESULT" &&
-            it.id != "FLOW_CONFIG"
-        }
+        val tabs = orderObject?.mapNotNull {
+            val tabId = it.jsonPrimitive.content
+            if (tabId != "TOP_RESULT" && tabId != "FLOW_CONFIG") {
+                Tab(tabId, tabId.lowercase().capitalize(Locale.ROOT))
+            } else {
+                null
+            }
+        } ?: emptyList()
 
-        oldSearch = query to tabs.map { tab ->
+        oldSearch = query to tabs.mapNotNull { tab ->
             val name = tab.id
-            val tabObject = resultObject[name]!!.jsonObject
-            val dataArray = tabObject["data"]!!.jsonArray
-            dataArray.toMediaItemsContainer(name.lowercase().capitalize(
-                Locale.ROOT))
+            val tabObject = resultObject?.get(name)?.jsonObject
+            val dataArray = tabObject?.get("data")?.jsonArray
+            dataArray?.toMediaItemsContainer(name.lowercase().capitalize(Locale.ROOT))
         }
         return listOf(Tab("All", "All")) + tabs
     }
