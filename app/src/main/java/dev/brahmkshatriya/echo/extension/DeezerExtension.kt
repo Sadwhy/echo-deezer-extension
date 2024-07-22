@@ -21,6 +21,7 @@ import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.QuickSearchItem
 import dev.brahmkshatriya.echo.common.models.Request.Companion.toRequest
 import dev.brahmkshatriya.echo.common.models.Streamable
+import dev.brahmkshatriya.echo.common.models.StreamableAudio
 import dev.brahmkshatriya.echo.common.models.Tab
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.common.models.User
@@ -36,7 +37,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.apache.http.conn.ConnectTimeoutException
 import java.util.Locale
 
 class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClient, AlbumClient, ArtistClient,
@@ -363,11 +363,22 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
 
     private val client = OkHttpClient()
 
-    override suspend fun getStreamableAudio(streamable: Streamable) = getByteStreamAudio(streamable, client)
+    override suspend fun getStreamableAudio(streamable: Streamable): StreamableAudio {
+        return if (streamable.quality == 1) {
+            StreamableAudio.StreamableRequest(streamable.id.toRequest())
+        } else {
+            getByteStreamAudio(streamable, client)
+        }
+
+
+    }
 
     override suspend fun getStreamableVideo(streamable: Streamable) = throw Exception("not Used")
 
     override suspend fun loadTrack(track: Track) = coroutineScope {
+        if (track.extras["__TYPE__"] == "show") {
+            return@coroutineScope track
+        }
         val jsonObject = if (track.extras["FILESIZE_MP3_MISC"] != "0" && track.extras["FILESIZE_MP3_MISC"] != null) {
             api.getMP3MediaUrl(track)
         } else {
@@ -441,20 +452,37 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     override fun getMediaItems(album: Album) = getMediaItems(album.artists.first())
 
     override suspend fun loadAlbum(album: Album): Album {
-        val jsonObject = api.album(album)
-        val resultsObject = jsonObject["results"]!!.jsonObject
-        return resultsObject.toAlbum()
+        if(album.extras["__TYPE__"] == "show") {
+            val jsonObject = api.show(album)
+            val resultsObject = jsonObject["results"]!!.jsonObject
+            return resultsObject.toShow()
+        } else {
+            val jsonObject = api.album(album)
+            val resultsObject = jsonObject["results"]!!.jsonObject
+            return resultsObject.toAlbum()
+        }
     }
 
     override fun loadTracks(album: Album): PagedData<Track> = PagedData.Single {
-        val jsonObject = api.album(album)
-        val resultsObject = jsonObject["results"]!!.jsonObject
-        val songsObject = resultsObject["SONGS"]!!.jsonObject
-        val dataArray = songsObject["data"]!!.jsonArray
-        val data = dataArray.map { song ->
-            song.jsonObject.toTrack()
+        if(album.extras["__TYPE__"] == "show") {
+            val jsonObject = api.show(album)
+            val resultsObject = jsonObject["results"]!!.jsonObject
+            val episodesObject = resultsObject["EPISODES"]!!.jsonObject
+            val dataArray = episodesObject["data"]!!.jsonArray
+            val data = dataArray.map { episode ->
+                episode.jsonObject.toEpisode()
+            }.reversed()
+            data
+        } else {
+            val jsonObject = api.album(album)
+            val resultsObject = jsonObject["results"]!!.jsonObject
+            val songsObject = resultsObject["SONGS"]!!.jsonObject
+            val dataArray = songsObject["data"]!!.jsonArray
+            val data = dataArray.map { song ->
+                song.jsonObject.toTrack()
+            }
+            data
         }
-        data
     }
 
     //<============= Playlist =============>

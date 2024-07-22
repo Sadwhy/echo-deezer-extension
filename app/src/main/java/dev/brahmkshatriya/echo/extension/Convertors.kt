@@ -9,6 +9,7 @@ import dev.brahmkshatriya.echo.common.models.ImageHolder
 import dev.brahmkshatriya.echo.common.models.ImageHolder.Companion.toImageHolder
 import dev.brahmkshatriya.echo.common.models.MediaItemsContainer
 import dev.brahmkshatriya.echo.common.models.Playlist
+import dev.brahmkshatriya.echo.common.models.Streamable
 import dev.brahmkshatriya.echo.common.models.Track
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -60,11 +61,56 @@ fun JsonElement.toEchoMediaItem(): EchoMediaItem? {
         type.contains("album") -> EchoMediaItem.Lists.AlbumItem(toAlbum())
         type.contains("song") -> EchoMediaItem.TrackItem(toTrack())
         type.contains("artist") -> EchoMediaItem.Profile.ArtistItem(toArtist())
+        type.contains("show") -> EchoMediaItem.Lists.AlbumItem(toShow())
+        type.contains("episode") -> EchoMediaItem.TrackItem(toEpisode())
         else -> null
     }
 }
 
+fun JsonElement.toShow(): Album {
+    val data = jsonObject["data"]?.jsonObject ?: jsonObject["DATA"]?.jsonObject ?: jsonObject
+    val md5 = data["SHOW_ART_MD5"]?.jsonPrimitive?.content ?: ""
+    return Album(
+        id = data["SHOW_ID"]?.jsonPrimitive?.content ?: "",
+        title = data["SHOW_NAME"]?.jsonPrimitive?.content ?: "",
+        cover = getCover(md5, "talk"),
+        tracks = jsonObject["EPISODES"]?.jsonObject?.get("total")?.jsonPrimitive?.int,
+        artists = listOf(
+            Artist(
+                id = "",
+                name = "",
+            )
+        ),
+        description = data["SHOW_DESCRIPTION"]?.jsonPrimitive?.content ?: "",
+        extras = mapOf(
+            "__TYPE__" to "show"
+        )
+    )
+}
 
+@TargetApi(Build.VERSION_CODES.O)
+fun JsonElement.toEpisode(): Track {
+    val data = jsonObject["data"]?.jsonObject ?: jsonObject["DATA"]?.jsonObject ?: jsonObject
+    val md5 = data["SHOW_ART_MD5"]?.jsonPrimitive?.content ?: ""
+    return Track(
+        id = data["EPISODE_ID"]?.jsonPrimitive?.content ?: "",
+        title = data["EPISODE_TITLE"]?.jsonPrimitive?.content ?: "",
+        cover = getCover(md5, "talk"),
+        duration = data["DURATION"]?.jsonPrimitive?.content?.toLong()?.times(1000),
+        //releaseDate = Date.from(Instant.ofEpochSecond(data["EPISODE_PUBLISHED_TIMESTAMP"]?.jsonPrimitive?.content?.toLong() ?: 0)).toString(),
+        audioStreamables = listOf(
+            Streamable(
+              id = data["EPISODE_DIRECT_STREAM_URL"]?.jsonPrimitive?.content ?: "",
+              quality = 1
+            )
+        ),
+        extras = mapOf(
+            "TRACK_TOKEN" to (data["TRACK_TOKEN"]?.jsonPrimitive?.content ?: ""),
+            "FILESIZE_MP3_MISC" to (data["FILESIZE_MP3_MISC"]?.jsonPrimitive?.content ?: "0"),
+            "__TYPE__" to "show"
+        )
+    )
+}
 
 fun JsonElement.toAlbum(): Album {
     val data = jsonObject["data"]?.jsonObject ?: jsonObject["DATA"]?.jsonObject ?: jsonObject

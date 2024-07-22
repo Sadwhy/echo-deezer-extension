@@ -508,6 +508,36 @@ class DeezerApi(private val settings: Settings = Settings()) {
         return jObject
     }
 
+    suspend fun show(album: Album): JsonObject {
+        val jsonData = callApi(
+            method = "deezer.pageShow",
+            params = mapOf(
+                "country" to settings.deezerCountry,
+                "lang" to settings.deezerLanguage,
+                "nb" to album.tracks,
+                "show_id" to album.id,
+                "start" to 0,
+                "user_id" to userId,
+            )
+        )
+        val jObject = json.decodeFromString<JsonObject>(jsonData)
+        return jObject
+    }
+
+    //Get favorite albums
+    suspend fun getShows(): JsonObject {
+        val jsonData = callApi(
+            method = "deezer.pageProfile",
+            params = mapOf(
+                "user_id" to userId,
+                "tab" to "albums",
+                "nb" to 50
+            )
+        )
+        val jObject = json.decodeFromString<JsonObject>(jsonData)
+        return jObject
+    }
+
     suspend fun playlist(playlist: Playlist): JsonObject {
         val jsonData = callApi(
             method = "deezer.pagePlaylist",
