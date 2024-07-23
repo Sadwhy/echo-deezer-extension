@@ -109,30 +109,27 @@ class DeezerApi(private val settings: Settings = Settings()) {
         ignoreUnknownKeys = true
     }
 
-    //Get headers
     private fun getHeaders(method: String? = ""): Headers {
-        val headersBuilder = Headers.Builder()
-        headersBuilder.add("Accept", "*/*")
-        headersBuilder.add("Accept-Charset", "utf-8,ISO-8859-1;q=0.7,*;q=0.3")
-        headersBuilder.add("Accept-Encoding", "gzip")
-        headersBuilder.add("Accept-Language", settings.deezerLanguage)
-        headersBuilder.add("Cache-Control", "max-age=0")
-        headersBuilder.add("Connection", "keep-alive")
-        headersBuilder.add("Content-Language", "${settings.deezerLanguage}-${settings.deezerCountry}")
-        headersBuilder.add("Content-Type", "application/json; charset=utf-8")
-        if (method != "user.getArl") {
-            headersBuilder.add("Cookie", "arl=$arl; sid=$sid")
-        } else {
-            headersBuilder.add("Cookie", "sid=$sid")
-        }
-        headersBuilder.add("Host", "www.deezer.com")
-        headersBuilder.add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
-        return headersBuilder.build()
+        return Headers.Builder().apply {
+            add("Accept", "*/*")
+            add("Accept-Charset", "utf-8,ISO-8859-1;q=0.7,*;q=0.3")
+            add("Accept-Encoding", "gzip")
+            add("Accept-Language", settings.deezerLanguage)
+            add("Cache-Control", "max-age=0")
+            add("Connection", "keep-alive")
+            add("Content-Language", "${settings.deezerLanguage}-${settings.deezerCountry}")
+            add("Content-Type", "application/json; charset=utf-8")
+            add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
+            if (method != "user.getArl") {
+                add("Cookie", "arl=$arl; sid=$sid")
+            } else {
+                add("Cookie", "sid=$sid")
+            }
+        }.build()
     }
 
-    private suspend fun callApi(method: String, params: Map<*,*>? = null, gatewayInput: String? = ""): String = withContext(Dispatchers.IO) {
-        // Generate URL
-        val urlBuilder = HttpUrl.Builder()
+    private suspend fun callApi(method: String, params: Map<*, *>? = null, gatewayInput: String? = ""): String = withContext(Dispatchers.IO) {
+        val url = HttpUrl.Builder()
             .scheme("https")
             .host("www.deezer.com")
             .addPathSegment("ajax")
@@ -141,33 +138,28 @@ class DeezerApi(private val settings: Settings = Settings()) {
             .addQueryParameter("input", "3")
             .addQueryParameter("api_version", "1.0")
             .addQueryParameter("api_token", token)
+            .apply {
+                if (!gatewayInput.isNullOrEmpty()) {
+                    addQueryParameter("gateway_input", gatewayInput)
+                }
+            }
+            .build()
 
-        // Conditionally add gateway_input if it's not empty
-        if (!gatewayInput.isNullOrEmpty()) {
-            urlBuilder.addQueryParameter("gateway_input", gatewayInput)
-        }
+        val requestBody = JSONObject(params ?: emptyMap<String, Any>()).toString().toRequestBody()
+        val request = Request.Builder()
+            .url(url)
+            .apply {
+                if (method != "user.getArl") {
+                    post(requestBody)
+                } else {
+                    get()
+                }
+                headers(getHeaders(method))
+            }
+            .build()
 
-        val url = urlBuilder.build()
-
-        // Create request body
-        val requestBody = JSONObject(params ?: emptyMap<String, Any>()).toString()
-            .toRequestBody()
-
-        // Create request
-        val requestBuilder = Request.Builder()
-        requestBuilder.url(url)
-        if (method != "user.getArl") {
-            requestBuilder.post(requestBody)
-        } else {
-            requestBuilder.get()
-        }
-        requestBuilder.headers(getHeaders(method))
-        val request = requestBuilder.build()
-
-        // Execute request
         val response = client.newCall(request).execute()
-        val responseBody = response.body?.string()
-        val body = responseBody.toString()
+        val responseBody = response.body?.string().orEmpty()
 
         if (method == "deezer.getUserData") {
             response.headers.forEach {
@@ -177,8 +169,8 @@ class DeezerApi(private val settings: Settings = Settings()) {
             }
         }
 
-        if(body.contains("\"VALID_TOKEN_REQUIRED\":\"Invalid CSRF token\"")) {
-            if(email.isEmpty() && pass.isEmpty()) {
+        if (responseBody.contains("\"VALID_TOKEN_REQUIRED\":\"Invalid CSRF token\"")) {
+            if (email.isEmpty() && pass.isEmpty()) {
                 DeezerUtils.setArlExpired(true)
                 throw Exception("Please re-login (Best use User + Pass method)")
             } else {
@@ -189,17 +181,17 @@ class DeezerApi(private val settings: Settings = Settings()) {
             }
         }
 
-        body
+        responseBody
     }
 
     suspend fun makeUser(email: String = "", pass: String = ""): List<User> {
         val userList = mutableListOf<User>()
         val jsonData = callApi("deezer.getUserData")
         val jObject = json.decodeFromString<JsonObject>(jsonData)
-        val userResults = jObject["results"]
-        val userObject = userResults!!.jsonObject["USER"]
+        val userResults = jObject["results"]!!
+        val userObject = userResults.jsonObject["USER"]!!
         val token = userResults.jsonObject["checkForm"]!!.jsonPrimitive.content
-        val userId = userObject!!.jsonObject["USER_ID"]!!.jsonPrimitive.content
+        val userId = userObject.jsonObject["USER_ID"]!!.jsonPrimitive.content
         val licenseToken = userObject.jsonObject["OPTIONS"]!!.jsonObject["license_token"]!!.jsonPrimitive.content
         val name = userObject.jsonObject["BLOG_NAME"]!!.jsonPrimitive.content
         val cover = userObject.jsonObject["USER_PICTURE"]!!.jsonPrimitive.content
@@ -253,7 +245,7 @@ class DeezerApi(private val settings: Settings = Settings()) {
         return BigInteger(1, digest).toString(16).padStart(32, '0')
     }
 
-    private fun getToken(params: Map<String, String> = emptyMap()): String {
+    private fun getToken(params: Map<String, String>): String {
         val url = "https://connect.deezer.com/oauth/user_auth.php"
         val httpUrl = url.toHttpUrlOrNull()!!.newBuilder().apply {
             params.forEach { (key, value) -> addQueryParameter(key, value) }
@@ -276,8 +268,7 @@ class DeezerApi(private val settings: Settings = Settings()) {
         }
     }
 
-      fun getSid() {
-        //Get SID
+    fun getSid() {
         val url = "https://www.deezer.com/"
         val request = Request.Builder()
             .url(url)
@@ -290,101 +281,90 @@ class DeezerApi(private val settings: Settings = Settings()) {
                 DeezerCredentialsHolder.updateCredentials(sid = it.second.substringAfter("sid=").substringBefore(";"))
             }
         }
-     }
+    }
 
     suspend fun getMP3MediaUrl(track: Track): JsonObject = withContext(Dispatchers.IO) {
-        val headersBuilder = Headers.Builder()
-        headersBuilder.add("Accept-Encoding", "gzip")
-        headersBuilder.add("Accept-Language", settings.deezerLanguage)
-        headersBuilder.add("Cache-Control", "max-age=0")
-        headersBuilder.add("Connection", "Keep-alive")
-        headersBuilder.add("Content-Type", "application/json; charset=utf-8")
-        headersBuilder.add("Cookie", "arl=$arl&sid=$sid")
-        headersBuilder.add("Host", "media.deezer.com")
-        headersBuilder.add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
-        val headers = headersBuilder.build()
+        val headers = Headers.Builder().apply {
+            add("Accept-Encoding", "gzip")
+            add("Accept-Language", settings.deezerLanguage)
+            add("Cache-Control", "max-age=0")
+            add("Connection", "Keep-alive")
+            add("Content-Type", "application/json; charset=utf-8")
+            add("Cookie", "arl=$arl&sid=$sid")
+            add("Host", "media.deezer.com")
+            add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
+        }.build()
 
-        val urlBuilder = HttpUrl.Builder()
+        val url = HttpUrl.Builder()
             .scheme("https")
             .host("media.deezer.com")
             .addPathSegment("v1")
             .addPathSegment("get_url")
+            .build()
 
-        val url = urlBuilder.build()
-
-        // Create request body
-        val requestBody =
-        JSONObject(
-        mapOf(
-            "license_token" to licenseToken,
-            "media" to arrayOf(
-                mapOf(
-                    "type" to "FULL",
-                    "formats" to arrayOf(
-                        mapOf(
-                            "cipher" to "BF_CBC_STRIPE",
-                            "format" to "MP3_MISC"
+        val requestBody = JSONObject(
+            mapOf(
+                "license_token" to licenseToken,
+                "media" to arrayOf(
+                    mapOf(
+                        "type" to "FULL",
+                        "formats" to arrayOf(
+                            mapOf(
+                                "cipher" to "BF_CBC_STRIPE",
+                                "format" to "MP3_MISC"
+                            )
                         )
                     )
-                )
-            ),
-            "track_tokens" to arrayOf(track.extras["TRACK_TOKEN"])
-        )
+                ),
+                "track_tokens" to arrayOf(track.extras["TRACK_TOKEN"])
+            )
         ).toString().toRequestBody("application/json; charset=utf-8".toMediaType())
 
-        // Create request
         val request = Request.Builder()
             .url(url)
             .post(requestBody)
             .headers(headers)
             .build()
 
-        // Execute request
         val response = clientNP.newCall(request).execute()
-        val responseBody = response.body?.string()
-        val body = responseBody.toString()
+        val responseBody = response.body?.string().orEmpty()
 
-        val jObject = json.decodeFromString<JsonObject>(body)
-
-        jObject
+        json.decodeFromString<JsonObject>(responseBody)
     }
 
     suspend fun getMediaUrl(track: Track, useFlac: Boolean, use128: Boolean): JsonObject = withContext(Dispatchers.IO) {
-        val urlBuilder = HttpUrl.Builder()
+        val url = HttpUrl.Builder()
             .scheme("https")
             .host("dzmedia.fly.dev")
             .addPathSegment("get_url")
+            .build()
 
-        val url = urlBuilder.build()
-
-        // Create request body
-        val requestBody = JSONObject(mapOf(
-            if(use128) {
-                "formats" to arrayOf("MP3_128", "MP3_64", "MP3_MISC")
+        val formats = if (use128) {
+            arrayOf("MP3_128", "MP3_64", "MP3_MISC")
+        } else {
+            if (useFlac) {
+                arrayOf("FLAC", "MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
             } else {
-                if (useFlac) {
-                    "formats" to arrayOf("FLAC", "MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
-                } else {
-                    "formats" to arrayOf("MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
-                }
-            },
-            "ids" to arrayOf(track.id.toLong())
-        )).toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+                arrayOf("MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
+            }
+        }
 
-        // Create request
+        val requestBody = JSONObject(
+            mapOf(
+                "formats" to formats,
+                "ids" to arrayOf(track.id.toLong())
+            )
+        ).toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+
         val request = Request.Builder()
             .url(url)
             .post(requestBody)
             .build()
 
-        // Execute request
         val response = clientNP.newCall(request).execute()
-        val responseBody = response.body?.string()
-        val body = responseBody.toString()
+        val responseBody = response.body?.string().orEmpty()
 
-        val jObject = json.decodeFromString<JsonObject>(body)
-
-        jObject
+        json.decodeFromString<JsonObject>(responseBody)
     }
 
     suspend fun search(query: String): JsonObject {
@@ -396,8 +376,7 @@ class DeezerApi(private val settings: Settings = Settings()) {
                 "start" to 0
             )
         )
-        val jObject = json.decodeFromString<JsonObject>(jsonData)
-        return jObject
+        return json.decodeFromString<JsonObject>(jsonData)
     }
 
     suspend fun searchSuggestions(query: String): JsonObject {
@@ -407,8 +386,7 @@ class DeezerApi(private val settings: Settings = Settings()) {
                 "QUERY" to query
             )
         )
-        val jObject = json.decodeFromString<JsonObject>(jsonData)
-        return jObject
+        return json.decodeFromString<JsonObject>(jsonData)
     }
 
     suspend fun track(tracks: Array<Track>): JsonObject {
@@ -418,11 +396,9 @@ class DeezerApi(private val settings: Settings = Settings()) {
                 "sng_ids" to tracks.map { it.id }
             )
         )
-        val jObject = json.decodeFromString<JsonObject>(jsonData)
-        return jObject
+        return json.decodeFromString<JsonObject>(jsonData)
     }
 
-    //Get favorite tracks
     suspend fun getTracks(): JsonObject {
         val jsonData = callApi(
             method = "favorite_song.getList",
@@ -433,8 +409,7 @@ class DeezerApi(private val settings: Settings = Settings()) {
                 "start" to 0
             )
         )
-        val jObject = json.decodeFromString<JsonObject>(jsonData)
-        return jObject
+        return json.decodeFromString<JsonObject>(jsonData)
     }
 
     suspend fun addFavoriteTrack(id: String) {
@@ -463,11 +438,9 @@ class DeezerApi(private val settings: Settings = Settings()) {
                 "lang" to settings.deezerLanguage
             )
         )
-        val jObject = json.decodeFromString<JsonObject>(jsonData)
-        return jObject
+        return json.decodeFromString<JsonObject>(jsonData)
     }
 
-    //Get favorite artists
     suspend fun getArtists(): JsonObject {
         val jsonData = callApi(
             method = "deezer.pageProfile",
@@ -477,8 +450,7 @@ class DeezerApi(private val settings: Settings = Settings()) {
                 "user_id" to userId
             )
         )
-        val jObject = json.decodeFromString<JsonObject>(jsonData)
-        return jObject
+        return json.decodeFromString<JsonObject>(jsonData)
     }
 
     suspend fun album(album: Album): JsonObject {
@@ -490,11 +462,9 @@ class DeezerApi(private val settings: Settings = Settings()) {
                 "lang" to settings.deezerLanguage
             )
         )
-        val jObject = json.decodeFromString<JsonObject>(jsonData)
-        return jObject
+        return json.decodeFromString<JsonObject>(jsonData)
     }
 
-    //Get favorite albums
     suspend fun getAlbums(): JsonObject {
         val jsonData = callApi(
             method = "deezer.pageProfile",
@@ -504,8 +474,7 @@ class DeezerApi(private val settings: Settings = Settings()) {
                 "nb" to 50
             )
         )
-        val jObject = json.decodeFromString<JsonObject>(jsonData)
-        return jObject
+        return json.decodeFromString<JsonObject>(jsonData)
     }
 
     suspend fun show(album: Album): JsonObject {
@@ -520,22 +489,20 @@ class DeezerApi(private val settings: Settings = Settings()) {
                 "user_id" to userId,
             )
         )
-        val jObject = json.decodeFromString<JsonObject>(jsonData)
-        return jObject
+        return json.decodeFromString<JsonObject>(jsonData)
     }
 
-    //Get favorite albums
+    //Get favorite shows
     suspend fun getShows(): JsonObject {
         val jsonData = callApi(
             method = "deezer.pageProfile",
             params = mapOf(
                 "user_id" to userId,
-                "tab" to "albums",
-                "nb" to 50
+                "tab" to "podcasts",
+                "nb" to 2000
             )
         )
-        val jObject = json.decodeFromString<JsonObject>(jsonData)
-        return jObject
+        return json.decodeFromString<JsonObject>(jsonData)
     }
 
     suspend fun playlist(playlist: Playlist): JsonObject {
@@ -549,12 +516,9 @@ class DeezerApi(private val settings: Settings = Settings()) {
                 "start" to 0
             )
         )
-        val jObject = json.decodeFromString<JsonObject>(jsonData)
-        return jObject
+        return json.decodeFromString<JsonObject>(jsonData)
     }
 
-
-    //Get users playlists
     suspend fun getPlaylists(): JsonObject {
         val jsonData = callApi(
             method = "deezer.pageProfile",
@@ -564,21 +528,20 @@ class DeezerApi(private val settings: Settings = Settings()) {
                 "nb" to 100
             )
         )
-        val jObject = json.decodeFromString<JsonObject>(jsonData)
-        return jObject
+        return json.decodeFromString<JsonObject>(jsonData)
     }
 
     suspend fun addToPlaylist(playlist: Playlist, tracks: List<Track>) {
-       callApi(
+        callApi(
             method = "playlist.addSongs",
             params = mapOf(
                 "playlist_id" to playlist.id,
                 "songs" to arrayOf(tracks.map { it.id } + 0)
             )
-       )
+        )
     }
 
-    suspend fun removeFromPlaylist(playlist: Playlist, tracks: List<Track> , indexes: List<Int>) {
+    suspend fun removeFromPlaylist(playlist: Playlist, tracks: List<Track>, indexes: List<Int>) {
         val trackIds = tracks.map { it.id }
         val ids = indexes.map { index -> trackIds[index] }
         callApi(
@@ -600,8 +563,7 @@ class DeezerApi(private val settings: Settings = Settings()) {
                 "status" to 0
             )
         )
-        val jObject = json.decodeFromString<JsonObject>(jsonData)
-        return jObject
+        return json.decodeFromString<JsonObject>(jsonData)
     }
 
     suspend fun deletePlaylist(id: String) {
@@ -613,7 +575,6 @@ class DeezerApi(private val settings: Settings = Settings()) {
         )
     }
 
-    //Update playlist metadata, status = see createPlaylist
     suspend fun updatePlaylist(id: String, title: String, description: String? = "") {
         callApi(
             method = "playlist.update",
@@ -637,7 +598,6 @@ class DeezerApi(private val settings: Settings = Settings()) {
         )
     }
 
-
     suspend fun homePage(): JsonObject {
         val jsonData = callApi(
             method = "page.get",
@@ -645,8 +605,7 @@ class DeezerApi(private val settings: Settings = Settings()) {
                 {"PAGE":"home","VERSION":"2.5","SUPPORT":{"ads":[],"deeplink-list":["deeplink"],"event-card":["live-event"],"grid-preview-one":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"grid-preview-two":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"horizontal-grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"horizontal-list":["track","song"],"item-highlight":["radio"],"large-card":["album","external-link","playlist","show","video-link"],"list":["episode"],"mini-banner":["external-link"],"slideshow":["album","artist","channel","external-link","flow","livestream","playlist","show","smarttracklist","user","video-link"],"small-horizontal-grid":["flow"],"long-card-horizontal-grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"filterable-grid":["flow"]},"LANG":"en","OPTIONS":["deeplink_newsandentertainment","deeplink_subscribeoffer"]}
             """.trimIndent()
         )
-        val jObject = json.decodeFromString<JsonObject>(jsonData)
-        return jObject
+        return json.decodeFromString<JsonObject>(jsonData)
     }
 
     suspend fun browsePage(): JsonObject {
@@ -656,7 +615,6 @@ class DeezerApi(private val settings: Settings = Settings()) {
                 {"PAGE":"channels/explore/explore-tab","VERSION":"2.5","SUPPORT":{"ads":[],"deeplink-list":["deeplink"],"event-card":["live-event"],"grid-preview-one":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"grid-preview-two":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"horizontal-grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"horizontal-list":["track","song"],"item-highlight":["radio"],"large-card":["album","external-link","playlist","show","video-link"],"list":["episode"],"message":["call_onboarding"],"mini-banner":["external-link"],"slideshow":["album","artist","channel","external-link","flow","livestream","playlist","show","smarttracklist","user","video-link"],"small-horizontal-grid":["flow"],"long-card-horizontal-grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"filterable-grid":["flow"]},"LANG":"de","OPTIONS":["deeplink_newsandentertainment","deeplink_subscribeoffer"]}
             """.trimIndent()
         )
-        val jObject = json.decodeFromString<JsonObject>(jsonData)
-        return jObject
+        return json.decodeFromString<JsonObject>(jsonData)
     }
 }

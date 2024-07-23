@@ -149,7 +149,8 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
             Tab("playlists", "Playlists"),
             Tab("albums", "Albums"),
             Tab("tracks", "Tracks"),
-            Tab("artists", "Artists")
+            Tab("artists", "Artists"),
+            Tab("shows", "Podcasts")
         )
 
         allTabs = "all" to tabs.mapNotNull { tab ->
@@ -158,12 +159,13 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
                 "albums" -> api.getAlbums()
                 "tracks" -> api.getTracks()
                 "artists" -> api.getArtists()
+                "shows" -> api.getShows()
                 else -> null
             } ?: return@mapNotNull null
 
             val resultObject = jsonObject["results"]?.jsonObject ?: return@mapNotNull null
             val dataArray = when (tab.id) {
-                "playlists", "albums", "artists" -> {
+                "playlists", "albums", "artists", "shows" -> {
                     val tabObject = resultObject["TAB"]?.jsonObject?.get(tab.id)?.jsonObject
                     tabObject?.get("data")?.jsonArray
                 }
@@ -187,6 +189,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
             "albums" -> fetchData { api.getAlbums() }
             "tracks" -> fetchData { api.getTracks() }
             "artists" -> fetchData { api.getArtists() }
+            "shows" -> fetchData { api.getShows() }
             else -> emptyList()
         }
         list
