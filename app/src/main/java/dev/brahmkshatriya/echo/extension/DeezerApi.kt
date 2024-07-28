@@ -81,8 +81,8 @@ class DeezerApi(private val settings: Settings = Settings()) {
         addInterceptor { chain ->
             val originalResponse = chain.proceed(chain.request())
             if (originalResponse.header("Content-Encoding") == "gzip") {
-                val gzipSource = GZIPInputStream(originalResponse.body?.byteStream())
-                val decompressedBody = gzipSource.readBytes().toResponseBody(originalResponse.body?.contentType())
+                val gzipSource = GZIPInputStream(originalResponse.body.byteStream())
+                val decompressedBody = gzipSource.readBytes().toResponseBody(originalResponse.body.contentType())
                 originalResponse.newBuilder().body(decompressedBody).build()
             } else {
                 originalResponse
@@ -95,8 +95,8 @@ class DeezerApi(private val settings: Settings = Settings()) {
         addInterceptor { chain ->
             val originalResponse = chain.proceed(chain.request())
             if (originalResponse.header("Content-Encoding") == "gzip") {
-                val gzipSource = GZIPInputStream(originalResponse.body?.byteStream())
-                val decompressedBody = gzipSource.readBytes().toResponseBody(originalResponse.body?.contentType())
+                val gzipSource = GZIPInputStream(originalResponse.body.byteStream())
+                val decompressedBody = gzipSource.readBytes().toResponseBody(originalResponse.body.contentType())
                 originalResponse.newBuilder().body(decompressedBody).build()
             } else {
                 originalResponse
@@ -159,7 +159,7 @@ class DeezerApi(private val settings: Settings = Settings()) {
             .build()
 
         val response = client.newCall(request).execute()
-        val responseBody = response.body?.string().orEmpty()
+        val responseBody = response.body.string()
 
         if (method == "deezer.getUserData") {
             response.headers.forEach {
@@ -264,7 +264,7 @@ class DeezerApi(private val settings: Settings = Settings()) {
 
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw Exception("Unexpected code $response")
-            return response.body?.string() ?: throw Exception("Empty response body")
+            return response.body.string()
         }
     }
 
@@ -327,7 +327,7 @@ class DeezerApi(private val settings: Settings = Settings()) {
             .build()
 
         val response = clientNP.newCall(request).execute()
-        val responseBody = response.body?.string().orEmpty()
+        val responseBody = response.body.string()
 
         json.decodeFromString<JsonObject>(responseBody)
     }
@@ -362,7 +362,7 @@ class DeezerApi(private val settings: Settings = Settings()) {
             .build()
 
         val response = clientNP.newCall(request).execute()
-        val responseBody = response.body?.string().orEmpty()
+        val responseBody = response.body.string()
 
         json.decodeFromString<JsonObject>(responseBody)
     }

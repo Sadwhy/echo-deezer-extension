@@ -28,6 +28,9 @@ import dev.brahmkshatriya.echo.common.models.User
 import dev.brahmkshatriya.echo.common.settings.Setting
 import dev.brahmkshatriya.echo.common.settings.SettingSwitch
 import dev.brahmkshatriya.echo.common.settings.Settings
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -370,10 +373,10 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         return if (streamable.quality == 1) {
             StreamableAudio.StreamableRequest(streamable.id.toRequest())
         } else {
-            getByteStreamAudio(streamable, client)
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+            getByteStreamAudio(scope, streamable, client)
         }
-
-
     }
 
     override suspend fun getStreamableVideo(streamable: Streamable) = throw Exception("not Used")

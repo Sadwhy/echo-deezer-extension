@@ -64,7 +64,7 @@ dependencies {
     val libVersion = "38e1df03f6"
     compileOnly("com.github.brahmkshatriya:echo:$libVersion")
 
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.14")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")

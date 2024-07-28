@@ -2,17 +2,24 @@ package dev.brahmkshatriya.echo.extension
 
 import dev.brahmkshatriya.echo.common.models.Streamable
 import dev.brahmkshatriya.echo.common.models.StreamableAudio
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
+import okhttp3.internal.http2.StreamResetException
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.io.PipedInputStream
+import java.io.PipedOutputStream
 import java.math.BigInteger
 import java.security.MessageDigest
 import java.util.Arrays
+import java.util.concurrent.TimeUnit
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -44,12 +51,12 @@ object Utils {
         val secretKeySpec = SecretKeySpec(blowfishKey.toByteArray(), "Blowfish")
         val thisTrackCipher = Cipher.getInstance("BLOWFISH/CBC/NoPadding")
         thisTrackCipher.init(Cipher.DECRYPT_MODE, secretKeySpec, secretIvSpec)
-        return thisTrackCipher.update(chunk)
+        return thisTrackCipher.doFinal(chunk)
     }
 
     fun getContentLength(url: String, client: OkHttpClient): Long {
         var totalLength = 0L
-        val request = okhttp3.Request.Builder().url(url).head().build()
+        val request = Request.Builder().url(url).head().build()
         val response = client.newCall(request).execute()
         totalLength += response.header("Content-Length")?.toLong() ?: 0L
         response.close()
@@ -70,99 +77,99 @@ fun String.toMD5(): String {
     return bytesToHex(bytes).lowercase()
 }
 
-fun getByteStreamAudio(streamable: Streamable, client: OkHttpClient): StreamableAudio {
+fun getByteStreamAudio(scope: CoroutineScope, streamable: Streamable, client: OkHttpClient): StreamableAudio {
     val url = streamable.id
     val contentLength = Utils.getContentLength(url, client)
     val key = streamable.extra["key"]!!
 
     val request = Request.Builder().url(url).build()
-    var decChunk = ByteArray(0)
+    val pipedInputStream = PipedInputStream()
+    val pipedOutputStream = PipedOutputStream(pipedInputStream)
 
-    runBlocking {
-        withContext(Dispatchers.IO) {
-            val response = client.newCall(request).execute()
-            val byteStream = response.body?.byteStream()
-                ?: throw IOException("Failed to get byte stream from response")
+    val clientWithTimeouts = client.newBuilder()
+        .readTimeout(60, TimeUnit.SECONDS)
+        .connectTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
+        .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
+        .protocols(listOf(Protocol.HTTP_1_1))
+        .build()
+
+    scope.launch(Dispatchers.IO) {
+        retry(3) {
+            val response = clientWithTimeouts.newCall(request).execute()
+            val byteStream = response.body.byteStream().buffered()
 
             try {
-                // Read the entire byte stream into memory
-                val completeStream = ByteArrayOutputStream()
-                val buffer = ByteArray(2 * 1024 * 1024) // Increased buffer size
-                var bytesRead: Int
-                while (byteStream.read(buffer).also { bytesRead = it } != -1) {
-                    completeStream.write(buffer, 0, bytesRead)
+                val buffer = ByteArray(2048)
+                var totalRead: Int
+                var counter = 0
+
+                while (true) {
+                    totalRead = 0
+                    while (totalRead < 2048) {
+                        val bytesRead = byteStream.read(buffer, totalRead, 2048 - totalRead)
+                        if (bytesRead == -1) break
+                            totalRead += bytesRead
+                        }
+
+                        if (totalRead == 0) break
+
+                        if (totalRead == 2048) {
+                            if (counter % 3 == 0) {
+                                val decryptedChunk = withContext(Dispatchers.Default) {
+                                    Utils.decryptBlowfish(buffer, key)
+                                }
+                                pipedOutputStream.write(decryptedChunk)
+                            } else {
+                                pipedOutputStream.write(buffer, 0, 2048)
+                            }
+                        } else {
+                            if (counter % 3 == 0) {
+                                val partialBuffer = buffer.copyOf(totalRead)
+                            val decryptedChunk = withContext(Dispatchers.Default) {
+                                Utils.decryptBlowfish(partialBuffer, key)
+                            }
+                            pipedOutputStream.write(decryptedChunk, 0, totalRead)
+                        } else {
+                            pipedOutputStream.write(buffer, 0, totalRead)
+                        }
+                    }
+
+                    counter++
+                    pipedOutputStream.flush()
                 }
-
-                // Ensure complete stream is read
-                val completeStreamBytes = completeStream.toByteArray()
-                println("Total bytes read: ${completeStreamBytes.size}")
-
-                // Determine chunk size based on decryption block size
-                val chunkSize = 2048 * 3072
-                val numChunks = (completeStreamBytes.size + chunkSize - 1) / chunkSize
-                println("Number of chunks: $numChunks")
-
-                // Measure decryption time
-                val startTime = System.nanoTime()
-
-                // Decrypt the chunks concurrently
-                val deferredChunks = (0 until numChunks).map { i ->
-                    val start = i * chunkSize
-                    val end = minOf((i + 1) * chunkSize, completeStreamBytes.size)
-                    println("Chunk $i: start $start, end $end")
-                    async(Dispatchers.Default) { decryptStreamChunk(completeStreamBytes.copyOfRange(start, end), key) }
-                }
-
-                // Wait for all decryption tasks to complete and concatenate the results
-                deferredChunks.forEach { deferred ->
-                    decChunk += deferred.await()
-                }
-
-                val endTime = System.nanoTime()
-                val duration = endTime - startTime
-                println("Decryption took ${duration / 1_000_000} milliseconds")
+            } catch (e: Exception) {
+                e.printStackTrace()
             } finally {
-                response.close()
-                byteStream.close()
+                try {
+                    response.close()
+                    byteStream.close()
+                    pipedOutputStream.close()
+                } catch (e: IOException) {
+                    e.printStackTrace()
+                }
             }
         }
     }
 
     return StreamableAudio.ByteStreamAudio(
-        stream = decChunk.inputStream(),
+        stream = pipedInputStream,
         totalBytes = contentLength
     )
 }
 
-private fun decryptStreamChunk(chunk: ByteArray, key: String): ByteArray {
-    val decryptedStream = ByteArrayOutputStream()
-    var place = 0
-
-    while (place < chunk.size) {
-        val remainingBytes = chunk.size - place
-        val blockSize = 2048
-        val encryptedBlock = blockSize * 3 // Every third block is encrypted
-
-        val currentChunkSize = min(remainingBytes, encryptedBlock)
-        val currentChunk = chunk.copyOfRange(place, place + currentChunkSize)
-        place += currentChunkSize
-
-        for (i in 0 until currentChunk.size step blockSize) {
-            val blockEnd = min(currentChunk.size, i + blockSize)
-            val block = currentChunk.copyOfRange(i, blockEnd)
-
-            if ((i / blockSize) % 3 == 0 && block.size == blockSize) {
-                val decryptedBlock = Utils.decryptBlowfish(block, key)
-                decryptedStream.write(decryptedBlock)
-            } else {
-                decryptedStream.write(block)
+suspend fun retry(times: Int, block: suspend () -> Unit) {
+    repeat(times) {
+        try {
+            block()
+            return
+        } catch (e: StreamResetException) {
+            if (it == times - 1) {
+                throw e
             }
+            delay(1000)
         }
     }
-
-    val decryptedBytes = decryptedStream.toByteArray()
-    println("Decrypted chunk size: ${decryptedBytes.size}")
-    return decryptedBytes
 }
 
 fun generateTrackUrl(trackId: String, md5Origin: String, mediaVersion: String, quality: Int): String {
