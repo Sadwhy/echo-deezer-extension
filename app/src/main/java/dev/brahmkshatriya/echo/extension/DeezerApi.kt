@@ -6,6 +6,7 @@ import dev.brahmkshatriya.echo.common.models.ImageHolder.Companion.toImageHolder
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.common.models.User
+import dev.brahmkshatriya.echo.common.settings.Settings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -27,14 +28,7 @@ import java.net.Proxy
 import java.security.MessageDigest
 import java.util.zip.GZIPInputStream
 
-// Settings placeholder
-class Settings {
-    val deezerLanguage: String = "en"
-    val deezerCountry: String = "US"
-}
-
-class DeezerApi(private val settings: Settings = Settings()) {
-
+class DeezerApi {
     init {
         // Ensure credentials are initialized when the API is first used
         if (DeezerCredentialsHolder.credentials == null) {
@@ -114,10 +108,10 @@ class DeezerApi(private val settings: Settings = Settings()) {
             add("Accept", "*/*")
             add("Accept-Charset", "utf-8,ISO-8859-1;q=0.7,*;q=0.3")
             add("Accept-Encoding", "gzip")
-            add("Accept-Language", settings.deezerLanguage)
+            add("Accept-Language", DeezerUtils.deezerLanguage)
             add("Cache-Control", "max-age=0")
             add("Connection", "keep-alive")
-            add("Content-Language", "${settings.deezerLanguage}-${settings.deezerCountry}")
+            add("Content-Language", "${DeezerUtils.deezerLanguage}-${DeezerUtils.deezerCountry}")
             add("Content-Type", "application/json; charset=utf-8")
             add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
             if (method != "user.getArl") {
@@ -286,7 +280,7 @@ class DeezerApi(private val settings: Settings = Settings()) {
     suspend fun getMP3MediaUrl(track: Track): JsonObject = withContext(Dispatchers.IO) {
         val headers = Headers.Builder().apply {
             add("Accept-Encoding", "gzip")
-            add("Accept-Language", settings.deezerLanguage)
+            add("Accept-Language", DeezerUtils.deezerLanguage)
             add("Cache-Control", "max-age=0")
             add("Connection", "Keep-alive")
             add("Content-Type", "application/json; charset=utf-8")
@@ -435,7 +429,7 @@ class DeezerApi(private val settings: Settings = Settings()) {
             method = "deezer.pageArtist",
             params = mapOf(
                 "art_id" to artist.id,
-                "lang" to settings.deezerLanguage
+                "lang" to DeezerUtils.deezerLanguage
             )
         )
         return json.decodeFromString<JsonObject>(jsonData)
@@ -459,7 +453,7 @@ class DeezerApi(private val settings: Settings = Settings()) {
             params = mapOf(
                 "alb_id" to album.id,
                 "header" to true,
-                "lang" to settings.deezerLanguage
+                "lang" to DeezerUtils.deezerLanguage
             )
         )
         return json.decodeFromString<JsonObject>(jsonData)
@@ -481,8 +475,8 @@ class DeezerApi(private val settings: Settings = Settings()) {
         val jsonData = callApi(
             method = "deezer.pageShow",
             params = mapOf(
-                "country" to settings.deezerCountry,
-                "lang" to settings.deezerLanguage,
+                "country" to DeezerUtils.deezerCountry,
+                "lang" to DeezerUtils.deezerLanguage,
                 "nb" to album.tracks,
                 "show_id" to album.id,
                 "start" to 0,
@@ -510,7 +504,7 @@ class DeezerApi(private val settings: Settings = Settings()) {
             method = "deezer.pagePlaylist",
             params = mapOf(
                 "playlist_id" to playlist.id,
-                "lang" to settings.deezerLanguage,
+                "lang" to DeezerUtils.deezerLanguage,
                 "nb" to playlist.tracks,
                 "tags" to true,
                 "start" to 0

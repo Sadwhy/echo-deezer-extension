@@ -11,6 +11,9 @@ data class DeezerCredentials(
 )
 
 object DeezerUtils {
+    const val deezerLanguage: String = "en"
+    const val deezerCountry: String = "US"
+
     private var _arlExpired: Boolean = false
     val arlExpired: Boolean
         get() = _arlExpired

@@ -1,16 +1,18 @@
 package dev.brahmkshatriya.echo.extension
 
+import android.annotation.SuppressLint
 import dev.brahmkshatriya.echo.common.models.Streamable
 import dev.brahmkshatriya.echo.common.models.StreamableAudio
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
+import okhttp3.coroutines.executeAsync
 import okhttp3.internal.http2.StreamResetException
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -23,7 +25,6 @@ import java.util.concurrent.TimeUnit
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
-import kotlin.math.min
 
 object Utils {
     private const val SECRET = "g4el58wc0zvf9na1"
@@ -77,6 +78,7 @@ fun String.toMD5(): String {
     return bytesToHex(bytes).lowercase()
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 fun getByteStreamAudio(scope: CoroutineScope, streamable: Streamable, client: OkHttpClient): StreamableAudio {
     val url = streamable.id
     val contentLength = Utils.getContentLength(url, client)
@@ -96,7 +98,7 @@ fun getByteStreamAudio(scope: CoroutineScope, streamable: Streamable, client: Ok
 
     scope.launch(Dispatchers.IO) {
         retry(3) {
-            val response = clientWithTimeouts.newCall(request).execute()
+            val response = clientWithTimeouts.newCall(request).executeAsync()
             val byteStream = response.body.byteStream().buffered()
 
             try {
@@ -116,9 +118,7 @@ fun getByteStreamAudio(scope: CoroutineScope, streamable: Streamable, client: Ok
 
                         if (totalRead == 2048) {
                             if (counter % 3 == 0) {
-                                val decryptedChunk = withContext(Dispatchers.Default) {
-                                    Utils.decryptBlowfish(buffer, key)
-                                }
+                                val decryptedChunk = Utils.decryptBlowfish(buffer, key)
                                 pipedOutputStream.write(decryptedChunk)
                             } else {
                                 pipedOutputStream.write(buffer, 0, 2048)
@@ -126,9 +126,7 @@ fun getByteStreamAudio(scope: CoroutineScope, streamable: Streamable, client: Ok
                         } else {
                             if (counter % 3 == 0) {
                                 val partialBuffer = buffer.copyOf(totalRead)
-                            val decryptedChunk = withContext(Dispatchers.Default) {
-                                Utils.decryptBlowfish(partialBuffer, key)
-                            }
+                            val decryptedChunk = Utils.decryptBlowfish(partialBuffer, key)
                             pipedOutputStream.write(decryptedChunk, 0, totalRead)
                         } else {
                             pipedOutputStream.write(buffer, 0, totalRead)
@@ -172,6 +170,7 @@ suspend fun retry(times: Int, block: suspend () -> Unit) {
     }
 }
 
+@SuppressLint("GetInstance")
 fun generateTrackUrl(trackId: String, md5Origin: String, mediaVersion: String, quality: Int): String {
     val magic = 164
     val step1 = ByteArrayOutputStream()

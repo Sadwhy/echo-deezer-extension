@@ -67,15 +67,6 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     )
 
     private lateinit var settings: Settings
-    override fun setSettings(settings: Settings) {
-        this.settings = settings
-    }
-
-    private val useFlac
-        get() = settings.getBoolean("flac") ?: false
-
-    private val use128
-        get() = settings.getBoolean("128") ?: false
 
     init {
         // Ensure credentials are initialized when the API is first used
@@ -93,8 +84,18 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
                 )
             )
         }
-
     }
+
+    override fun setSettings(settings: Settings) {
+        this.settings = settings
+    }
+
+    private val useFlac
+        get() = settings.getBoolean("flac") ?: false
+
+    private val use128
+        get() = settings.getBoolean("128") ?: false
+
 
     private val credentials: DeezerCredentials
         get() = DeezerCredentialsHolder.credentials ?: throw IllegalStateException("DeezerCredentials not initialized")
