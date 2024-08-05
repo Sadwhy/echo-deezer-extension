@@ -326,17 +326,17 @@ class DeezerApi {
         json.decodeFromString<JsonObject>(responseBody)
     }
 
-    suspend fun getMediaUrl(track: Track, useFlac: Boolean, use128: Boolean): JsonObject = withContext(Dispatchers.IO) {
+    suspend fun getMediaUrl(track: Track, quality: String): JsonObject = withContext(Dispatchers.IO) {
         val url = HttpUrl.Builder()
             .scheme("https")
             .host("dzmedia.fly.dev")
             .addPathSegment("get_url")
             .build()
 
-        val formats = if (use128) {
+        val formats = if (quality == "128") {
             arrayOf("MP3_128", "MP3_64", "MP3_MISC")
         } else {
-            if (useFlac) {
+            if (quality == "flac") {
                 arrayOf("FLAC", "MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
             } else {
                 arrayOf("MP3_320", "MP3_128", "MP3_64", "MP3_MISC")

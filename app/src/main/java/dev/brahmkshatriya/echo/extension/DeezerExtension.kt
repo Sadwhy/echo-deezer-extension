@@ -10,12 +10,11 @@ import dev.brahmkshatriya.echo.common.clients.PlaylistClient
 import dev.brahmkshatriya.echo.common.clients.SearchClient
 import dev.brahmkshatriya.echo.common.clients.ShareClient
 import dev.brahmkshatriya.echo.common.clients.TrackClient
-import dev.brahmkshatriya.echo.common.exceptions.LoginRequiredException
 import dev.brahmkshatriya.echo.common.helpers.Page
 import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Artist
-import dev.brahmkshatriya.echo.common.models.ExtensionType
+import dev.brahmkshatriya.echo.common.models.ClientException
 import dev.brahmkshatriya.echo.common.models.MediaItemsContainer
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.QuickSearchItem
@@ -26,6 +25,7 @@ import dev.brahmkshatriya.echo.common.models.Tab
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.common.models.User
 import dev.brahmkshatriya.echo.common.settings.Setting
+import dev.brahmkshatriya.echo.common.settings.SettingList
 import dev.brahmkshatriya.echo.common.settings.SettingSwitch
 import dev.brahmkshatriya.echo.common.settings.Settings
 import kotlinx.coroutines.CoroutineScope
@@ -52,18 +52,23 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override val settingItems: List<Setting> = listOf(
-        SettingSwitch(
-            "Use FLAC",
-            "flac",
-            "Use FLAC if available (loading takes longer)",
-            false
-        ),
-        SettingSwitch(
-            "Use 128kbps",
-            "128",
-            "Use 128kbps(overrides FLAC option)",
-            false
-        ),
+        SettingList(
+            "Audio Quality",
+            "quality",
+            "Choose your prefered audio quality",
+            mutableListOf(
+                "FLAC",
+                "320kbps",
+                "128kbps"
+
+            ),
+            mutableListOf(
+                "flac",
+                "320",
+                "128"
+            ),
+            1
+        )
     )
 
     private lateinit var settings: Settings
@@ -90,12 +95,8 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         this.settings = settings
     }
 
-    private val useFlac
-        get() = settings.getBoolean("flac") ?: false
-
-    private val use128
-        get() = settings.getBoolean("128") ?: false
-
+    private val quality
+        get() = settings.getString("quality") ?: "320"
 
     private val credentials: DeezerCredentials
         get() = DeezerCredentialsHolder.credentials ?: throw IllegalStateException("DeezerCredentials not initialized")
@@ -117,7 +118,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     override suspend fun getHomeTabs() = listOf<Tab>()
 
     override fun getHomeFeed(tab: Tab?): PagedData<MediaItemsContainer> = PagedData.Continuous {
-        if(arl.isEmpty() || arlExpired) throw loginRequiredException
+        if(arl.isEmpty() || arlExpired) throw ClientException.LoginRequired()
         val dataList = mutableListOf<MediaItemsContainer>()
         val jObject = api.homePage()
         val resultObject = jObject["results"]!!.jsonObject
@@ -184,7 +185,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override fun getLibraryFeed(tab: Tab?) = PagedData.Single {
-        if (arl.isEmpty() || arlExpired) throw loginRequiredException
+        if (arl.isEmpty() || arlExpired) throw ClientException.LoginRequired()
 
         val tabId = tab?.id ?: "all"
         val list = when (tabId) {
@@ -214,12 +215,12 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override suspend fun addTracksToPlaylist(playlist: Playlist, tracks: List<Track>, index: Int, new: List<Track>) {
-        if(arl.isEmpty() || arlExpired) throw loginRequiredException
+        if(arl.isEmpty() || arlExpired) throw ClientException.LoginRequired()
         api.addToPlaylist(playlist, new)
     }
 
     override suspend fun createPlaylist(title: String, description: String?): Playlist {
-        if(arl.isEmpty() || arlExpired) throw loginRequiredException
+        if(arl.isEmpty() || arlExpired) throw ClientException.LoginRequired()
         val jsonObject = api.createPlaylist(title, description)
         val id = jsonObject["results"]?.jsonPrimitive?.content ?: ""
         val playlist = Playlist(
@@ -232,17 +233,17 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override suspend fun deletePlaylist(playlist: Playlist) {
-        if(arl.isEmpty() || arlExpired) throw loginRequiredException
+        if(arl.isEmpty() || arlExpired) throw ClientException.LoginRequired()
         api.deletePlaylist(playlist.id)
     }
 
     override suspend fun editPlaylistMetadata(playlist: Playlist, title: String, description: String?) {
-        if(arl.isEmpty() || arlExpired) throw loginRequiredException
+        if(arl.isEmpty() || arlExpired) throw ClientException.LoginRequired()
         api.updatePlaylist(playlist.id, title, description)
     }
 
     override suspend fun likeTrack(track: Track, liked: Boolean): Boolean {
-        if(arl.isEmpty() || arlExpired) throw loginRequiredException
+        if(arl.isEmpty() || arlExpired) throw ClientException.LoginRequired()
         if(liked) {
             api.addFavoriteTrack(track.id)
             return true
@@ -253,7 +254,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override suspend fun listEditablePlaylists(): List<Playlist> {
-        if(arl.isEmpty() || arlExpired) throw loginRequiredException
+        if(arl.isEmpty() || arlExpired) throw ClientException.LoginRequired()
         val playlistList = mutableListOf<Playlist>()
         val jsonObject = api.getPlaylists()
         val resultObject = jsonObject["results"]!!.jsonObject
@@ -271,14 +272,14 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override suspend fun moveTrackInPlaylist(playlist: Playlist, tracks: List<Track>, fromIndex: Int, toIndex: Int) {
-        if(arl.isEmpty() || arlExpired) throw loginRequiredException
+        if(arl.isEmpty() || arlExpired) throw ClientException.LoginRequired()
         val idArray = tracks.map { it.id }.toTypedArray()
         val newIdArray = moveElement(idArray, fromIndex, toIndex)
         api.updatePlaylistOrder(playlist.id, newIdArray)
     }
 
     override suspend fun removeTracksFromPlaylist(playlist: Playlist, tracks: List<Track>, indexes: List<Int>) {
-        if(arl.isEmpty() || arlExpired) throw loginRequiredException
+        if(arl.isEmpty() || arlExpired) throw ClientException.LoginRequired()
         api.removeFromPlaylist(playlist, tracks, indexes)
     }
 
@@ -301,7 +302,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     private var oldSearch: Pair<String, List<MediaItemsContainer>>? = null
 
     override fun searchFeed(query: String?, tab: Tab?) = PagedData.Single {
-        if (arl.isEmpty() || arlExpired) throw loginRequiredException
+        if (arl.isEmpty() || arlExpired) throw ClientException.LoginRequired()
         query ?: return@Single browseFeed()
 
         oldSearch?.takeIf { it.first == query && (tab == null || tab.id == "All") }?.second?.let {
@@ -366,6 +367,10 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         return listOf(Tab("All", "All")) + tabs
     }
 
+    override suspend fun deleteSearchHistory(query: QuickSearchItem.SearchQueryItem) {
+        TODO("Not yet implemented")
+    }
+
     //<============= Play =============>
 
     private val client = OkHttpClient()
@@ -389,7 +394,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         val jsonObject = if (track.extras["FILESIZE_MP3_MISC"] != "0" && track.extras["FILESIZE_MP3_MISC"] != null) {
             api.getMP3MediaUrl(track)
         } else {
-            api.getMediaUrl(track, useFlac, use128)
+            api.getMediaUrl(track, quality)
         }
 
         val key = Utils.createBlowfishKey(track.id)
@@ -580,7 +585,10 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
 
     //<============= Login =============>
 
-    private val loginRequiredException = LoginRequiredException("deezer", "Deezer", ExtensionType.MUSIC)
+    override suspend fun getCurrentUser(): User {
+        val userList = api.makeUser()
+        return userList.first()
+    }
 
     override val loginWebViewInitialUrl = "https://www.deezer.com/login?redirect_type=page&redirect_link=%2Faccount%2F"
         .toRequest(mapOf(Pair("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")))
