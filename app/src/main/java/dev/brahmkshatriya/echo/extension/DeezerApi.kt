@@ -6,7 +6,6 @@ import dev.brahmkshatriya.echo.common.models.ImageHolder.Companion.toImageHolder
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.common.models.User
-import dev.brahmkshatriya.echo.common.settings.Settings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -46,6 +45,12 @@ class DeezerApi {
             )
         }
     }
+
+    private val language: String
+        get() = DeezerUtils.settings.getString("lang") ?: "en-US"
+
+    private val country: String
+        get() = DeezerUtils.settings.getString("country") ?: "en-US"
 
     private val credentials: DeezerCredentials
         get() = DeezerCredentialsHolder.credentials ?: throw IllegalStateException("DeezerCredentials not initialized")
@@ -108,10 +113,10 @@ class DeezerApi {
             add("Accept", "*/*")
             add("Accept-Charset", "utf-8,ISO-8859-1;q=0.7,*;q=0.3")
             add("Accept-Encoding", "gzip")
-            add("Accept-Language", DeezerUtils.deezerLanguage)
+            add("Accept-Language", language)
             add("Cache-Control", "max-age=0")
             add("Connection", "keep-alive")
-            add("Content-Language", "${DeezerUtils.deezerLanguage}-${DeezerUtils.deezerCountry}")
+            add("Content-Language", language)
             add("Content-Type", "application/json; charset=utf-8")
             add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
             if (method != "user.getArl") {
@@ -280,7 +285,7 @@ class DeezerApi {
     suspend fun getMP3MediaUrl(track: Track): JsonObject = withContext(Dispatchers.IO) {
         val headers = Headers.Builder().apply {
             add("Accept-Encoding", "gzip")
-            add("Accept-Language", DeezerUtils.deezerLanguage)
+            add("Accept-Language", language.substringBefore("-"))
             add("Cache-Control", "max-age=0")
             add("Connection", "Keep-alive")
             add("Content-Type", "application/json; charset=utf-8")
@@ -429,7 +434,7 @@ class DeezerApi {
             method = "deezer.pageArtist",
             params = mapOf(
                 "art_id" to artist.id,
-                "lang" to DeezerUtils.deezerLanguage
+                "lang" to language.substringBefore("-")
             )
         )
         return json.decodeFromString<JsonObject>(jsonData)
@@ -453,7 +458,7 @@ class DeezerApi {
             params = mapOf(
                 "alb_id" to album.id,
                 "header" to true,
-                "lang" to DeezerUtils.deezerLanguage
+                "lang" to language.substringBefore("-")
             )
         )
         return json.decodeFromString<JsonObject>(jsonData)
@@ -475,8 +480,8 @@ class DeezerApi {
         val jsonData = callApi(
             method = "deezer.pageShow",
             params = mapOf(
-                "country" to DeezerUtils.deezerCountry,
-                "lang" to DeezerUtils.deezerLanguage,
+                "country" to language.substringAfter("-"),
+                "lang" to language.substringBefore("-"),
                 "nb" to album.tracks,
                 "show_id" to album.id,
                 "start" to 0,
@@ -504,7 +509,7 @@ class DeezerApi {
             method = "deezer.pagePlaylist",
             params = mapOf(
                 "playlist_id" to playlist.id,
-                "lang" to DeezerUtils.deezerLanguage,
+                "lang" to language.substringBefore("-"),
                 "nb" to playlist.tracks,
                 "tags" to true,
                 "start" to 0
@@ -596,7 +601,7 @@ class DeezerApi {
         val jsonData = callApi(
             method = "page.get",
             gatewayInput = """
-                {"PAGE":"home","VERSION":"2.5","SUPPORT":{"ads":[],"deeplink-list":["deeplink"],"event-card":["live-event"],"grid-preview-one":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"grid-preview-two":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"horizontal-grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"horizontal-list":["track","song"],"item-highlight":["radio"],"large-card":["album","external-link","playlist","show","video-link"],"list":["episode"],"mini-banner":["external-link"],"slideshow":["album","artist","channel","external-link","flow","livestream","playlist","show","smarttracklist","user","video-link"],"small-horizontal-grid":["flow"],"long-card-horizontal-grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"filterable-grid":["flow"]},"LANG":"en","OPTIONS":["deeplink_newsandentertainment","deeplink_subscribeoffer"]}
+                {"PAGE":"home","VERSION":"2.5","SUPPORT":{"ads":[],"deeplink-list":["deeplink"],"event-card":["live-event"],"grid-preview-one":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"grid-preview-two":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"horizontal-grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"horizontal-list":["track","song"],"item-highlight":["radio"],"large-card":["album","external-link","playlist","show","video-link"],"list":["episode"],"mini-banner":["external-link"],"slideshow":["album","artist","channel","external-link","flow","livestream","playlist","show","smarttracklist","user","video-link"],"small-horizontal-grid":["flow"],"long-card-horizontal-grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"filterable-grid":["flow"]},"LANG":"${language.substringBefore("-")}","OPTIONS":["deeplink_newsandentertainment","deeplink_subscribeoffer"]}
             """.trimIndent()
         )
         return json.decodeFromString<JsonObject>(jsonData)
@@ -606,9 +611,18 @@ class DeezerApi {
         val jsonData = callApi(
             method = "page.get",
             gatewayInput = """
-                {"PAGE":"channels/explore/explore-tab","VERSION":"2.5","SUPPORT":{"ads":[],"deeplink-list":["deeplink"],"event-card":["live-event"],"grid-preview-one":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"grid-preview-two":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"horizontal-grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"horizontal-list":["track","song"],"item-highlight":["radio"],"large-card":["album","external-link","playlist","show","video-link"],"list":["episode"],"message":["call_onboarding"],"mini-banner":["external-link"],"slideshow":["album","artist","channel","external-link","flow","livestream","playlist","show","smarttracklist","user","video-link"],"small-horizontal-grid":["flow"],"long-card-horizontal-grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"filterable-grid":["flow"]},"LANG":"de","OPTIONS":["deeplink_newsandentertainment","deeplink_subscribeoffer"]}
+                {"PAGE":"channels/explore/explore-tab","VERSION":"2.5","SUPPORT":{"ads":[],"deeplink-list":["deeplink"],"event-card":["live-event"],"grid-preview-one":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"grid-preview-two":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"horizontal-grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"horizontal-list":["track","song"],"item-highlight":["radio"],"large-card":["album","external-link","playlist","show","video-link"],"list":["episode"],"message":["call_onboarding"],"mini-banner":["external-link"],"slideshow":["album","artist","channel","external-link","flow","livestream","playlist","show","smarttracklist","user","video-link"],"small-horizontal-grid":["flow"],"long-card-horizontal-grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"filterable-grid":["flow"]},"LANG":"${language.substringBefore("-")}","OPTIONS":["deeplink_newsandentertainment","deeplink_subscribeoffer"]}
             """.trimIndent()
         )
         return json.decodeFromString<JsonObject>(jsonData)
+    }
+
+    suspend fun updateCountry() {
+        callApi(
+            method = "user.updateRecommendationCountry",
+            params = mapOf(
+                "RECOMMENDATION_COUNTRY" to country
+            )
+        )
     }
 }

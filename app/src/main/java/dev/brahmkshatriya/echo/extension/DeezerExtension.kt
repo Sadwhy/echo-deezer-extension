@@ -1,5 +1,6 @@
 package dev.brahmkshatriya.echo.extension
 
+import android.content.Context
 import dev.brahmkshatriya.echo.common.clients.AlbumClient
 import dev.brahmkshatriya.echo.common.clients.ArtistClient
 import dev.brahmkshatriya.echo.common.clients.ExtensionClient
@@ -25,9 +26,12 @@ import dev.brahmkshatriya.echo.common.models.Tab
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.common.models.User
 import dev.brahmkshatriya.echo.common.settings.Setting
+import dev.brahmkshatriya.echo.common.settings.SettingCategory
 import dev.brahmkshatriya.echo.common.settings.SettingList
-import dev.brahmkshatriya.echo.common.settings.SettingSwitch
 import dev.brahmkshatriya.echo.common.settings.Settings
+import dev.brahmkshatriya.echo.extension.DeezerCountries.getDefaultCountryIndex
+import dev.brahmkshatriya.echo.extension.DeezerCountries.getDefaultLanguageIndex
+import dev.brahmkshatriya.echo.extension.DeezerUtils.settings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,7 +46,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.Locale
 
-class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClient, AlbumClient, ArtistClient,
+class DeezerExtension(context: Context? = null) : ExtensionClient, HomeFeedClient, TrackClient, SearchClient, AlbumClient, ArtistClient,
     PlaylistClient, ShareClient, LoginClient.WebView.Cookie, LoginClient.UsernamePassword, LoginClient.CustomTextInput,
     LibraryClient {
 
@@ -55,7 +59,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         SettingList(
             "Audio Quality",
             "quality",
-            "Choose your prefered audio quality",
+            "Choose your preferred audio quality",
             mutableListOf(
                 "FLAC",
                 "320kbps",
@@ -68,10 +72,30 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
                 "128"
             ),
             1
-        )
+        ),
+        SettingCategory(
+            "Language & Country",
+            "langcount",
+            mutableListOf(
+                SettingList(
+                    "Language",
+                    "lang",
+                    "Choose your preferred language for loaded stuff",
+                    DeezerCountries.languageEntryTitles,
+                    DeezerCountries.languageEntryValues,
+                    getDefaultLanguageIndex(context)
+                ),
+                SettingList(
+                    "Country",
+                    "country",
+                    "Choose your preferred country for browse recommendations",
+                    DeezerCountries.countryEntryTitles,
+                    DeezerCountries.countryEntryValues,
+                    getDefaultCountryIndex(context)
+                )
+            )
+        ),
     )
-
-    private lateinit var settings: Settings
 
     init {
         // Ensure credentials are initialized when the API is first used
@@ -92,7 +116,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override fun setSettings(settings: Settings) {
-        this.settings = settings
+        DeezerUtils.settings = settings
     }
 
     private val quality
@@ -100,6 +124,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
 
     private val credentials: DeezerCredentials
         get() = DeezerCredentialsHolder.credentials ?: throw IllegalStateException("DeezerCredentials not initialized")
+
     private val utils: DeezerUtils
         get() = DeezerUtils
 
@@ -323,6 +348,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
 
     private suspend fun browseFeed(): List<MediaItemsContainer> {
         val dataList = mutableListOf<MediaItemsContainer>()
+        api.updateCountry()
         val jsonObject = api.browsePage()
         val resultObject = jsonObject["results"]!!.jsonObject
         val sections = resultObject["sections"]!!.jsonArray

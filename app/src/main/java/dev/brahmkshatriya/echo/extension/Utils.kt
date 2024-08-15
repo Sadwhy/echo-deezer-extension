@@ -111,21 +111,22 @@ fun getByteStreamAudio(scope: CoroutineScope, streamable: Streamable, client: Ok
                     while (totalRead < 2048) {
                         val bytesRead = byteStream.read(buffer, totalRead, 2048 - totalRead)
                         if (bytesRead == -1) break
-                            totalRead += bytesRead
-                        }
 
-                        if (totalRead == 0) break
+                        totalRead += bytesRead
+                    }
 
-                        if (totalRead == 2048) {
-                            if (counter % 3 == 0) {
-                                val decryptedChunk = Utils.decryptBlowfish(buffer, key)
-                                pipedOutputStream.write(decryptedChunk)
-                            } else {
-                                pipedOutputStream.write(buffer, 0, 2048)
-                            }
+                    if (totalRead == 0) break
+
+                    if (totalRead == 2048) {
+                        if (counter % 3 == 0) {
+                            val decryptedChunk = Utils.decryptBlowfish(buffer, key)
+                            pipedOutputStream.write(decryptedChunk)
                         } else {
-                            if (counter % 3 == 0) {
-                                val partialBuffer = buffer.copyOf(totalRead)
+                            pipedOutputStream.write(buffer, 0, 2048)
+                        }
+                    } else {
+                        if (counter % 3 == 0) {
+                            val partialBuffer = buffer.copyOf(totalRead)
                             val decryptedChunk = Utils.decryptBlowfish(partialBuffer, key)
                             pipedOutputStream.write(decryptedChunk, 0, totalRead)
                         } else {
