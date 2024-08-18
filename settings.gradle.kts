@@ -18,4 +18,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Deezer Extension"
 include(":app")
- 
+include(":ext")

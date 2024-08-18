@@ -1,42 +1,37 @@
+import com.android.build.gradle.AppExtension
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
 
-val extensionClass = "DeezerExtension"
-val id = "deezer"
-val name = "Deezer"
-val version = "1.0.0"
-val description = "Deezer Extension for Echo."
-val author = "Luftnos"
-val iconUrl = "https://e-cdn-files.dzcdn.net/cache/images/common/favicon/favicon-240x240.bb3a6a29ad16a77f10cb.png"
+apply<EchoExtensionPlugin>()
+configure<EchoExtension> {
+    versionCode = 1
+    versionName = "1.0.0"
+    extensionClass = "DeezerExtension"
+    id = "deezer"
+    name = "Deezer"
+    description = "Deezer Extension for Echo."
+    author = "Luftnos"
+    iconUrl = "https://e-cdn-files.dzcdn.net/cache/images/common/favicon/favicon-240x240.bb3a6a29ad16a77f10cb.png"
+}
+
+dependencies {
+    implementation(project(":ext"))
+    val libVersion: String by project
+    compileOnly("com.github.brahmkshatriya:echo:$libVersion")
+}
 
 android {
     namespace = "dev.brahmkshatriya.echo.extension"
     compileSdk = 34
-
     defaultConfig {
         applicationId = "dev.brahmkshatriya.echo.extension.deezer"
-        minSdk = 24
-        targetSdk = 34
-
-        versionCode = 1
-        versionName = version
-
-        resValue("string", "app_name", "Echo : $name Extension")
-        resValue("string", "class_path", "$namespace.$extensionClass")
-        resValue("string", "name", name)
-        resValue("string", "id", id)
-        resValue("string", "version", version)
-        resValue("string", "description", description)
-        resValue("string", "author", author)
-        iconUrl?.let { resValue("string", "icon_url", it) }
-
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
-        release {
+        all {
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -44,32 +39,39 @@ android {
             )
         }
     }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
-    }
-    kotlinOptions {
-        jvmTarget = "1.8"
-    }
-
-    @Suppress("UnstableApiUsage")
-    testOptions {
-        unitTests {
-            this.isReturnDefaultValues = true
-        }
-    }
+}
+open class EchoExtension {
+    var extensionClass: String? = null
+    var id: String? = null
+    var name: String? = null
+    var description: String? = null
+    var author: String? = null
+    var iconUrl: String? = null
+    var versionCode: Int? = null
+    var versionName: String? = null
 }
 
-dependencies {
-    val libVersion = "f6716fb9e9" //"main-SNAPSHOT"
-    compileOnly("com.github.brahmkshatriya:echo:$libVersion")
-
-    implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.14")
-    implementation("com.squareup.okhttp3:okhttp-coroutines:5.0.0-alpha.14")
-
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
-
-    testImplementation("junit:junit:4.13.2")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1-Beta")
-    testImplementation("com.github.brahmkshatriya:echo:$libVersion")
+abstract class EchoExtensionPlugin : Plugin<Project> {
+    override fun apply(project: Project) {
+        val echoExtension = project.extensions.create("echoExtension", EchoExtension::class.java)
+        project.afterEvaluate {
+            project.extensions.configure<AppExtension>("android") {
+                defaultConfig.apply {
+                    minSdk = 24
+                    targetSdk = 34
+                    with(echoExtension) {
+                        resValue("string", "id", id!!)
+                        resValue("string", "name", name!!)
+                        resValue("string", "app_name", "Echo : $name Extension")
+                        val extensionClass = extensionClass!!
+                        resValue("string", "class_path", "$namespace.$extensionClass")
+                        resValue("string", "version", versionName!!)
+                        resValue("string", "description", description!!)
+                        resValue("string", "author", author!!)
+                        iconUrl?.let { resValue("string", "icon_url", it) }
+                    }
+                }
+            }
+        }
+    }
 }
