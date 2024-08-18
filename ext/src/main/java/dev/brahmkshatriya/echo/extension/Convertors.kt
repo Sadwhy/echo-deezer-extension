@@ -1,7 +1,5 @@
 package dev.brahmkshatriya.echo.extension
 
-import android.annotation.TargetApi
-import android.os.Build
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.EchoMediaItem
@@ -88,7 +86,6 @@ fun JsonElement.toShow(): Album {
     )
 }
 
-@TargetApi(Build.VERSION_CODES.O)
 fun JsonElement.toEpisode(): Track {
     val data = jsonObject["data"]?.jsonObject ?: jsonObject["DATA"]?.jsonObject ?: jsonObject
     val md5 = data["SHOW_ART_MD5"]?.jsonPrimitive?.content ?: ""
@@ -146,7 +143,7 @@ fun JsonElement.toArtist(): Artist {
     )
 }
 
-@TargetApi(Build.VERSION_CODES.O)
+@Suppress("NewApi")
 fun JsonElement.toTrack(): Track {
     val data = jsonObject["data"]?.jsonObject ?: jsonObject
     val md5 = data["ALB_PICTURE"]?.jsonPrimitive?.content ?: ""

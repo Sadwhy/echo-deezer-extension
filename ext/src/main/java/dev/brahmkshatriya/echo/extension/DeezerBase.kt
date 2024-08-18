@@ -1,7 +1,5 @@
 package dev.brahmkshatriya.echo.extension
 
-import android.content.Context
-import android.content.SharedPreferences
 import dev.brahmkshatriya.echo.common.settings.Settings
 import java.util.Locale
 
@@ -16,17 +14,18 @@ data class DeezerCredentials(
 )
 
 object DeezerCountries {
-    fun getDefaultCountryIndex(context: Context?): Int {
-        val sharedPreferences: SharedPreferences? = context?.getSharedPreferences("appPreferences", Context.MODE_PRIVATE)
-        val storedCountryCode = sharedPreferences?.getString("countryCode", null)
+    fun getDefaultCountryIndex(settings: Settings?): Int {
+        val storedCountryCode = settings?.getString("countryCode")
 
         return if (storedCountryCode != null) {
             countryEntryValues.indexOf(storedCountryCode).takeIf { it >= 0 } ?: 0
         } else {
             val defaultCountryCode = Locale.getDefault().country
-            sharedPreferences?.edit()?.putString("countryCode", defaultCountryCode)?.apply()
+            settings?.putString("countryCode", defaultCountryCode)
             countryEntryValues.indexOf(defaultCountryCode).takeIf { it >= 0 } ?: 0
         }
+
+
     }
 
     val countryEntryTitles = mutableListOf(
@@ -67,17 +66,19 @@ object DeezerCountries {
         "VU", "VE", "VN", "YE", "ZM", "ZW"
     )
 
-    fun getDefaultLanguageIndex(context: Context?): Int {
-        val sharedPreferences: SharedPreferences? = context?.getSharedPreferences("appPreferences", Context.MODE_PRIVATE)
-        val storedLanguageCode = sharedPreferences?.getString("languageCode", null)
+    @Suppress("NewApi")
+    fun getDefaultLanguageIndex(settings: Settings?): Int {
+        val storedLanguageCode = settings?.getString("languageCode")
 
         return if (storedLanguageCode != null) {
             languageEntryValues.indexOf(storedLanguageCode).takeIf { it >= 0 } ?: 0
         } else {
             val defaultLanguageCode = Locale.getDefault().toLanguageTag()
-            sharedPreferences?.edit()?.putString("languageCode", defaultLanguageCode)?.apply()
+            settings?.putString("languageCode", defaultLanguageCode)
             languageEntryValues.indexOf(defaultLanguageCode).takeIf { it >= 0 } ?: 0
         }
+
+
     }
 
     val languageEntryTitles = mutableListOf(
@@ -96,7 +97,7 @@ object DeezerCountries {
 }
 
 object DeezerUtils {
-    lateinit var settings: Settings
+    var settings: Settings? = null
 
     private var _arlExpired: Boolean = false
     val arlExpired: Boolean

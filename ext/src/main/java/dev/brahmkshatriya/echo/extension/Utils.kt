@@ -1,6 +1,5 @@
 package dev.brahmkshatriya.echo.extension
 
-import android.annotation.SuppressLint
 import dev.brahmkshatriya.echo.common.models.Streamable
 import dev.brahmkshatriya.echo.common.models.StreamableAudio
 import kotlinx.coroutines.CoroutineScope
@@ -78,6 +77,7 @@ fun String.toMD5(): String {
     return bytesToHex(bytes).lowercase()
 }
 
+@Suppress("NewApi")
 @OptIn(ExperimentalCoroutinesApi::class)
 fun getByteStreamAudio(scope: CoroutineScope, streamable: Streamable, client: OkHttpClient): StreamableAudio {
     val url = streamable.id
@@ -171,7 +171,7 @@ suspend fun retry(times: Int, block: suspend () -> Unit) {
     }
 }
 
-@SuppressLint("GetInstance")
+@Suppress("NewApi")
 fun generateTrackUrl(trackId: String, md5Origin: String, mediaVersion: String, quality: Int): String {
     val magic = 164
     val step1 = ByteArrayOutputStream()
@@ -219,30 +219,4 @@ private fun bytesToHexTrack(bytes: ByteArray): String {
         hexChars[j * 2 + 1] = HEX_ARRAY[v and 0x0F]
     }
     return String(hexChars)
-}
-
-fun <T> moveElement(array: Array<T>, fromIndex: Int, toIndex: Int): Array<T> {
-    if (fromIndex !in array.indices || toIndex !in array.indices) {
-        throw IndexOutOfBoundsException("Index out of bounds")
-    }
-
-    if (fromIndex == toIndex) {
-        return array
-    }
-
-    val element = array[fromIndex]
-    if (fromIndex < toIndex) {
-        // Move elements from fromIndex+1 to toIndex one position to the left
-        for (i in fromIndex until toIndex) {
-            array[i] = array[i + 1]
-        }
-    } else {
-        // Move elements from toIndex to fromIndex-1 one position to the right
-        for (i in fromIndex downTo toIndex + 1) {
-            array[i] = array[i - 1]
-        }
-    }
-    array[toIndex] = element
-
-    return array
 }

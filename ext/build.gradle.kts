@@ -12,7 +12,8 @@ dependencies {
     val libVersion: String by project
     compileOnly("com.github.brahmkshatriya:echo:$libVersion")
 
-    testImplementation("junit:junit:4.13.2")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1-Beta")
-    testImplementation("com.github.brahmkshatriya:echo:$libVersion")
+    implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.14")
+    implementation("com.squareup.okhttp3:okhttp-coroutines:5.0.0-alpha.14")
+
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 }

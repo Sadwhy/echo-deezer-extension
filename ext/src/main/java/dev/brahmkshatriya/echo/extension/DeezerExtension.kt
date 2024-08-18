@@ -1,6 +1,5 @@
 package dev.brahmkshatriya.echo.extension
 
-import android.content.Context
 import dev.brahmkshatriya.echo.common.clients.AlbumClient
 import dev.brahmkshatriya.echo.common.clients.ArtistClient
 import dev.brahmkshatriya.echo.common.clients.ExtensionClient
@@ -28,6 +27,7 @@ import dev.brahmkshatriya.echo.common.models.User
 import dev.brahmkshatriya.echo.common.settings.Setting
 import dev.brahmkshatriya.echo.common.settings.SettingCategory
 import dev.brahmkshatriya.echo.common.settings.SettingList
+import dev.brahmkshatriya.echo.common.settings.SettingSwitch
 import dev.brahmkshatriya.echo.common.settings.Settings
 import dev.brahmkshatriya.echo.extension.DeezerCountries.getDefaultCountryIndex
 import dev.brahmkshatriya.echo.extension.DeezerCountries.getDefaultLanguageIndex
@@ -46,7 +46,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.Locale
 
-class DeezerExtension(context: Context? = null) : ExtensionClient, HomeFeedClient, TrackClient, SearchClient, AlbumClient, ArtistClient,
+class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClient, AlbumClient, ArtistClient,
     PlaylistClient, ShareClient, LoginClient.WebView.Cookie, LoginClient.UsernamePassword, LoginClient.CustomTextInput,
     LibraryClient {
 
@@ -55,7 +55,7 @@ class DeezerExtension(context: Context? = null) : ExtensionClient, HomeFeedClien
         ignoreUnknownKeys = true
     }
 
-    override val settingItems: List<Setting> = listOf(
+    override val settingItems: List<Setting> get() = listOf(
         SettingList(
             "Audio Quality",
             "quality",
@@ -73,6 +73,12 @@ class DeezerExtension(context: Context? = null) : ExtensionClient, HomeFeedClien
             ),
             1
         ),
+        SettingSwitch(
+          "Use Proxy",
+            "proxy",
+            "Use proxy to prevent GEO-Blocking",
+            false
+        ),
         SettingCategory(
             "Language & Country",
             "langcount",
@@ -83,7 +89,7 @@ class DeezerExtension(context: Context? = null) : ExtensionClient, HomeFeedClien
                     "Choose your preferred language for loaded stuff",
                     DeezerCountries.languageEntryTitles,
                     DeezerCountries.languageEntryValues,
-                    getDefaultLanguageIndex(context)
+                    getDefaultLanguageIndex(settings)
                 ),
                 SettingList(
                     "Country",
@@ -91,7 +97,7 @@ class DeezerExtension(context: Context? = null) : ExtensionClient, HomeFeedClien
                     "Choose your preferred country for browse recommendations",
                     DeezerCountries.countryEntryTitles,
                     DeezerCountries.countryEntryValues,
-                    getDefaultCountryIndex(context)
+                    getDefaultCountryIndex(settings)
                 )
             )
         ),
@@ -120,7 +126,7 @@ class DeezerExtension(context: Context? = null) : ExtensionClient, HomeFeedClien
     }
 
     private val quality
-        get() = settings.getString("quality") ?: "320"
+        get() = settings?.getString("quality") ?: "320"
 
     private val credentials: DeezerCredentials
         get() = DeezerCredentialsHolder.credentials ?: throw IllegalStateException("DeezerCredentials not initialized")
@@ -298,9 +304,9 @@ class DeezerExtension(context: Context? = null) : ExtensionClient, HomeFeedClien
 
     override suspend fun moveTrackInPlaylist(playlist: Playlist, tracks: List<Track>, fromIndex: Int, toIndex: Int) {
         if(arl.isEmpty() || arlExpired) throw ClientException.LoginRequired()
-        val idArray = tracks.map { it.id }.toTypedArray()
-        val newIdArray = moveElement(idArray, fromIndex, toIndex)
-        api.updatePlaylistOrder(playlist.id, newIdArray)
+        val idArray = tracks.map { it.id }.toMutableList()
+        idArray.add(toIndex, idArray.removeAt(fromIndex))
+        api.updatePlaylistOrder(playlist.id, idArray)
     }
 
     override suspend fun removeTracksFromPlaylist(playlist: Playlist, tracks: List<Track>, indexes: List<Int>) {
@@ -367,6 +373,7 @@ class DeezerExtension(context: Context? = null) : ExtensionClient, HomeFeedClien
         return dataList
     }
 
+    @Suppress("NewApi")
     override suspend fun searchTabs(query: String?): List<Tab> {
         if (arl.isEmpty() || arlExpired) return emptyList()
         query ?: return emptyList()
