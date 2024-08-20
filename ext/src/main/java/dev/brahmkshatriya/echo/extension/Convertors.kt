@@ -9,6 +9,7 @@ import dev.brahmkshatriya.echo.common.models.MediaItemsContainer
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.Streamable
 import dev.brahmkshatriya.echo.common.models.Track
+import dev.brahmkshatriya.echo.common.models.User
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -61,6 +62,7 @@ fun JsonElement.toEchoMediaItem(): EchoMediaItem? {
         type.contains("artist") -> EchoMediaItem.Profile.ArtistItem(toArtist())
         type.contains("show") -> EchoMediaItem.Lists.AlbumItem(toShow())
         type.contains("episode") -> EchoMediaItem.TrackItem(toEpisode())
+        type.contains("flow") -> EchoMediaItem.Lists.PlaylistItem(toFlow())
         else -> null
     }
 }
@@ -179,8 +181,22 @@ fun JsonElement.toPlaylist(): Playlist {
         cover = getCover(md5, type),
         description = data["DESCRIPTION"]?.jsonPrimitive?.content ?: "",
         subtitle = jsonObject["subtitle"]?.jsonPrimitive?.content ?: "",
-        isEditable = data["PARENT_USER_ID"]!!.jsonPrimitive.content == DeezerCredentialsHolder.credentials?.userId,
+        isEditable = data["PARENT_USER_ID"]?.jsonPrimitive?.content == DeezerCredentialsHolder.credentials?.userId,
         tracks = data["NB_SONG"]?.jsonPrimitive?.int ?: 0,
+    )
+}
+
+fun JsonElement.toFlow(): Playlist {
+    val data = jsonObject["data"]?.jsonObject ?: jsonObject
+    val md5 = jsonObject["pictures"]?.jsonArray?.first()?.jsonObject?.get("md5")?.jsonPrimitive?.content ?: ""
+    return Playlist(
+        id = "0",
+        title = data["title"]?.jsonPrimitive?.content ?: "",
+        cover = getCover(md5, "cover"),
+        isEditable = false,
+        extras = mapOf(
+            "id" to (data["id"]?.jsonPrimitive?.content ?: "")
+        )
     )
 }
 

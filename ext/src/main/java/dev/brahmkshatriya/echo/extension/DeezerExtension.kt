@@ -7,9 +7,11 @@ import dev.brahmkshatriya.echo.common.clients.HomeFeedClient
 import dev.brahmkshatriya.echo.common.clients.LibraryClient
 import dev.brahmkshatriya.echo.common.clients.LoginClient
 import dev.brahmkshatriya.echo.common.clients.PlaylistClient
+import dev.brahmkshatriya.echo.common.clients.RadioClient
 import dev.brahmkshatriya.echo.common.clients.SearchClient
 import dev.brahmkshatriya.echo.common.clients.ShareClient
 import dev.brahmkshatriya.echo.common.clients.TrackClient
+import dev.brahmkshatriya.echo.common.clients.UserClient
 import dev.brahmkshatriya.echo.common.helpers.Page
 import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.models.Album
@@ -44,10 +46,12 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.InputStream
+import java.io.PipedInputStream
 import java.util.Locale
 
 class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClient, AlbumClient, ArtistClient,
-    PlaylistClient, ShareClient, LoginClient.WebView.Cookie, LoginClient.UsernamePassword, LoginClient.CustomTextInput,
+    PlaylistClient, RadioClient, ShareClient, LoginClient.WebView.Cookie, LoginClient.UsernamePassword, LoginClient.CustomTextInput,
     LibraryClient {
 
     private val json = Json {
@@ -167,7 +171,8 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
                 id == "25f9200f-1ce0-45eb-abdc-02aecf7604b2" ||
                 id == "c320c7ad-95f5-4021-8de1-cef16b053b6d" ||
                 id == "b2e8249f-8541-479e-ab90-cf4cf5896cbc" ||
-                id == "927121fd-ef7b-428e-8214-ae859435e51c") {
+                id == "927121fd-ef7b-428e-8214-ae859435e51c" ||
+                id == "b21892d3-7e9c-4b06-aff6-2c3be3266f68") {
                 val data = section.toMediaItemsContainer(name = name)
                 dataList.add(data)
             }
@@ -408,12 +413,12 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
 
     private val client = OkHttpClient()
 
+    @Suppress("NewApi")
     override suspend fun getStreamableAudio(streamable: Streamable): StreamableAudio {
         return if (streamable.quality == 1) {
             StreamableAudio.StreamableRequest(streamable.id.toRequest())
         } else {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-
             getByteStreamAudio(scope, streamable, client)
         }
     }
@@ -533,31 +538,63 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     //<============= Playlist =============>
 
     override fun getMediaItems(playlist: Playlist) = PagedData.Single {
-        val jsonObject = api.playlist(playlist)
-        val resultsObject = jsonObject["results"]!!.jsonObject
-        val songsObject = resultsObject["SONGS"]!!.jsonObject
-        val dataArray = songsObject["data"]!!.jsonArray
-        val data = dataArray.map { song ->
-            song.jsonObject.toMediaItemsContainer(name = "")
+        if(playlist.id != "0") {
+            val jsonObject = api.playlist(playlist)
+            val resultsObject = jsonObject["results"]!!.jsonObject
+            val songsObject = resultsObject["SONGS"]!!.jsonObject
+            val dataArray = songsObject["data"]!!.jsonArray
+            val data = dataArray.map { song ->
+                song.jsonObject.toMediaItemsContainer(name = "")
+            }
+            emptyList<MediaItemsContainer>()
+        } else {
+            val jsonObject = api.flow(playlist.extras["id"] ?: "")
+            val resultsObject = jsonObject["results"]!!.jsonObject
+            val dataArray = resultsObject["data"]!!.jsonArray
+            val data = dataArray.map { song ->
+                song.jsonObject.toTrack()
+            }
+            emptyList<MediaItemsContainer>()
         }
-        emptyList<MediaItemsContainer>()
     }
 
     override suspend fun loadPlaylist(playlist: Playlist): Playlist {
-        val jsonObject = api.playlist(playlist)
-        val resultsObject = jsonObject["results"]!!.jsonObject
-        return resultsObject.toPlaylist()
+        return if (playlist.id != "0") {
+            val jsonObject = api.playlist(playlist)
+            val resultsObject = jsonObject["results"]!!.jsonObject
+            resultsObject.toPlaylist()
+        } else {
+            playlist
+        }
     }
 
     override fun loadTracks(playlist: Playlist): PagedData<Track> = PagedData.Single {
-        val jsonObject = api.playlist(playlist)
-        val resultsObject = jsonObject["results"]!!.jsonObject
-        val songsObject = resultsObject["SONGS"]!!.jsonObject
-        val dataArray = songsObject["data"]!!.jsonArray
-        val data = dataArray.map { song ->
-            song.jsonObject.toTrack()
+        if(playlist.id == "0") {
+            val jsonObject = api.flow(playlist.extras["id"] ?: "")
+            val resultsObject = jsonObject["results"]!!.jsonObject
+            val dataArray = resultsObject["data"]!!.jsonArray
+            val data = dataArray.map { song ->
+                song.jsonObject.toTrack()
+            }
+            data
+        } else if(playlist.extras["mix"] == "0") {
+            val jsonObject = api.mix(playlist.id)
+            val resultsObject = jsonObject["results"]!!.jsonObject
+            val dataArray = resultsObject["data"]!!.jsonArray
+            val data = dataArray.map { song ->
+                song.jsonObject.toTrack()
+            }
+            data
+        } else {
+            val jsonObject = api.playlist(playlist)
+            val resultsObject = jsonObject["results"]!!.jsonObject
+            val songsObject = resultsObject["SONGS"]!!.jsonObject
+            val dataArray = songsObject["data"]!!.jsonArray
+            val data = dataArray.map { song ->
+                song.jsonObject.toTrack()
+            }
+            data
         }
-        data
     }
 
     //<============= Artist =============>
@@ -614,6 +651,50 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         val jsonObject = api.artist(artist)
         val resultsObject = jsonObject["results"]!!.jsonObject["DATA"]!!.jsonObject
         return resultsObject.toArtist()
+    }
+
+    //<============= Radio =============>
+
+    override suspend fun radio(track: Track): Playlist {
+        return Playlist(
+            id = track.id,
+            title = track.title,
+            cover = track.cover,
+            isEditable = false,
+            extras = mapOf(
+                "mix" to "0"
+            )
+        )
+    }
+
+    override suspend fun radio(album: Album): Playlist {
+        TODO("Not yet implemented")
+    }
+
+    override suspend fun radio(artist: Artist): Playlist {
+        TODO("Not yet implemented")
+    }
+
+    override suspend fun radio(user: User): Playlist {
+        TODO("Not yet implemented")
+    }
+
+    override suspend fun radio(playlist: Playlist): Playlist {
+        return if (playlist.id != "0") {
+            Playlist(
+                id = "",
+                title = "",
+                isEditable = false
+            )
+        } else {
+            Playlist(
+                id = playlist.id,
+                title = playlist.title,
+                cover = playlist.cover,
+                isEditable = false,
+                extras = playlist.extras
+            )
+        }
     }
 
     //<============= Login =============>

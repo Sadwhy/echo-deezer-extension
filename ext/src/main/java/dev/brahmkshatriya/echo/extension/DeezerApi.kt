@@ -648,4 +648,28 @@ class DeezerApi {
             }
         )
     }
+
+    suspend fun flow(id: String): JsonObject {
+        val jsonData = callApi(
+            method = "radio.getUserRadio",
+            params = buildJsonObject {
+                if(id != "default") {
+                    put("config_id", id)
+                }
+                put("user_id", userId)
+            }
+        )
+        return json.decodeFromString<JsonObject>(jsonData)
+    }
+
+    suspend fun mix(id: String): JsonObject {
+        val jsonData = callApi(
+            method = "song.getSearchTrackMix",
+            params = buildJsonObject {
+                put("sng_id", id)
+                put("start_with_input_track", false)
+            }
+        )
+        return json.decodeFromString<JsonObject>(jsonData)
+    }
 }
